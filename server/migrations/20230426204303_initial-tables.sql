@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS AssociationTreasurer (
 
 -- Financial data
 -- If `amount < 0` it's an expense, otherwise it's an income.
-CREATE TABLE IF NOT EXISTS Transactions(
+CREATE TABLE IF NOT EXISTS Transaction(
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     association_id UUID NOT NULL REFERENCES Association(id),
     creator_id UUID NOT NULL REFERENCES "User"(id),
@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS Transactions(
     amount DECIMAL(9, 2) NOT NULL,
     -- Date for which this expense/income is related.
     reference_date DATE NOT NULL,
-    deleted BOOLEAN DEFAULT FALSE,
+    deleted BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
