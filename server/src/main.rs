@@ -1,39 +1,31 @@
+use std::env;
+
 use actix_web::{
     guard,
     web::{self, Data},
     App, HttpResponse, HttpServer,
 };
-use async_graphql::{
-    http::{playground_source, GraphQLPlaygroundConfig},
-    EmptySubscription, Schema,
-};
+use async_graphql::http::{playground_source, GraphQLPlaygroundConfig};
 use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse};
-use db::Database;
-use graphql::{Mutation, Query};
-use sqlx::SqlitePool;
+use dotenv::dotenv;
+use server::user::{get_user_schema, graphql::ProjectSchema};
+use sqlx::PgPool;
 
-mod db;
-mod graphql;
-mod schema;
 mod utils;
 
-const DB_URL: &str = "sqlite://sqlite.db";
-
-pub type ProjectSchema = Schema<Query, Mutation, EmptySubscription>;
 #[actix_web::main]
 async fn main() -> anyhow::Result<()> {
     env_logger::init();
-    let db = SqlitePool::connect(DB_URL).await.unwrap();
-    let database = Database { db };
+    dotenv().ok();
+    let db_url = env::var("DATABASE_URL").unwrap();
+    let db = PgPool::connect(&db_url).await.unwrap();
 
     // Graphql entry.
     async fn index(schema: Data<ProjectSchema>, req: GraphQLRequest) -> GraphQLResponse {
         schema.execute(req.into_inner()).await.into()
     }
 
-    let schema_data = Schema::build(Query, Mutation, EmptySubscription)
-        .data(database)
-        .finish();
+    let user_schema_data = get_user_schema(db.clone());
 
     async fn graphql_playground() -> HttpResponse {
         HttpResponse::Ok()
@@ -43,7 +35,7 @@ async fn main() -> anyhow::Result<()> {
 
     HttpServer::new(move || {
         App::new()
-            .app_data(Data::new(schema_data.clone()))
+            .app_data(Data::new(user_schema_data.clone()))
             .service(web::resource("/").guard(guard::Post()).to(index))
             .service(
                 web::resource("/")
