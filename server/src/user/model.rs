@@ -3,7 +3,9 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
-use super::{graphql::UserInput, DB};
+use crate::DB;
+
+use super::graphql::UserInput;
 
 #[derive(SimpleObject, FromRow, Deserialize, Serialize)]
 pub struct User {

@@ -1,15 +1,14 @@
-use async_graphql::{Context, EmptySubscription, FieldResult, InputObject, Object, Schema};
+use async_graphql::{Context, FieldResult, InputObject, Object};
 use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::model::User;
 
-pub struct Query;
-
-pub type ProjectSchema = Schema<Query, Mutation, EmptySubscription>;
+#[derive(Default)]
+pub struct AssociationQuery;
 
 #[Object(extends)]
-impl Query {
+impl AssociationQuery {
     // Query user.
     async fn user(&self, ctx: &Context<'_>, id: Uuid) -> FieldResult<User> {
         let pool = ctx.data::<PgPool>().unwrap();
@@ -18,14 +17,15 @@ impl Query {
     }
 }
 
-pub struct Mutation;
+#[derive(Default)]
+pub struct AssociationMutation;
 
 #[Object(extends)]
-impl Mutation {
+impl AssociationMutation {
     // Mutate user.
-    async fn create_user(&self, ctx: &Context<'_>, input_user: UserInput) -> FieldResult<User> {
+    async fn create_user(&self, ctx: &Context<'_>, user: UserInput) -> FieldResult<User> {
         let pool = ctx.data::<PgPool>().unwrap();
-        let user = User::create(pool, input_user).await?;
+        let user = User::create(pool, user).await?;
         Ok(user)
     }
 }

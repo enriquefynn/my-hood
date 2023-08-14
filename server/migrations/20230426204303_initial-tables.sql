@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- Add migration script here
-CREATE TABLE "User"(
+CREATE TABLE IF NOT EXISTS "User"(
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(250) NOT NULL,
     birthday TIMESTAMP NOT NULL,
@@ -18,12 +18,13 @@ CREATE TABLE "User"(
 
 
 CREATE TABLE IF NOT EXISTS Association(
-    id UUID PRIMARY KEY NOT NULL,
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(250) NOT NULL,    
     neighborhood VARCHAR(250) NOT NULL,
     country CHAR(2) NOT NULL,
     state VARCHAR(32) NOT NULL,
     address VARCHAR(250) NOT NULL,
+    identity VARCHAR(250),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -61,7 +62,7 @@ CREATE TABLE IF NOT EXISTS AssociationTreasurer (
 -- Financial data
 -- If `amount < 0` it's an expense, otherwise it's an income.
 CREATE TABLE IF NOT EXISTS Transactions(
-    id UUID PRIMARY KEY NOT NULL,
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     association_id UUID NOT NULL REFERENCES Association(id),
     creator_id UUID NOT NULL REFERENCES "User"(id),
     details VARCHAR(1024) NOT NULL,

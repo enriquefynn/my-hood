@@ -5,10 +5,13 @@ use actix_web::{
     web::{self, Data},
     App, HttpResponse, HttpServer,
 };
-use async_graphql::http::{playground_source, GraphQLPlaygroundConfig};
+use async_graphql::{
+    http::{playground_source, GraphQLPlaygroundConfig},
+    EmptySubscription, Schema,
+};
 use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse};
 use dotenv::dotenv;
-use server::user::{get_user_schema, graphql::ProjectSchema};
+use server::graphql::{get_schema, Mutation, Query};
 use sqlx::PgPool;
 
 mod utils;
@@ -21,11 +24,16 @@ async fn main() -> anyhow::Result<()> {
     let db = PgPool::connect(&db_url).await.unwrap();
 
     // Graphql entry.
-    async fn index(schema: Data<ProjectSchema>, req: GraphQLRequest) -> GraphQLResponse {
+    async fn index(
+        schema: Data<Schema<Query, Mutation, EmptySubscription>>,
+        req: GraphQLRequest,
+    ) -> GraphQLResponse {
         schema.execute(req.into_inner()).await.into()
     }
 
-    let user_schema_data = get_user_schema(db.clone());
+    // let user_schema_data = get_user_schema(db.clone());
+    // let association_schema = get_association_schema(db.clone());
+    let schema = get_schema(db.clone());
 
     async fn graphql_playground() -> HttpResponse {
         HttpResponse::Ok()
@@ -35,7 +43,9 @@ async fn main() -> anyhow::Result<()> {
 
     HttpServer::new(move || {
         App::new()
-            .app_data(Data::new(user_schema_data.clone()))
+            // .app_data(Data::new(user_schema_data.clone()))
+            // .app_data(Data::new(association_schema.clone()))
+            .app_data(Data::new(schema.clone()))
             .service(web::resource("/").guard(guard::Post()).to(index))
             .service(
                 web::resource("/")
