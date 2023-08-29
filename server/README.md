@@ -9,7 +9,6 @@ mutation {
     address: "Rua a asd",
     email: "foo@ba33r.com",
     birthday:"2023-04-28T18:37:58.523027",
-    signedAt: "2023-04-28T18:37:58.523027",
     identities: "cpf:232323232, rg:213123123"}) {
     id, name
   }

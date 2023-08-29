@@ -1,7 +1,9 @@
 use crate::{
-    association::graphql::{UserMutation, UserQuery},
+    association::graphql::{AssociationMutation, AssociationQuery},
+    config::Config,
+    relations::graphql::RelationsMutation,
     transaction::graphql::{TransactionMutation, TransactionQuery},
-    user::graphql::{AssociationMutation, AssociationQuery},
+    user::graphql::{UserMutation, UserQuery},
     DB,
 };
 
@@ -11,10 +13,16 @@ use async_graphql::{EmptySubscription, MergedObject, Schema};
 pub struct Query(UserQuery, AssociationQuery, TransactionQuery);
 
 #[derive(MergedObject, Default)]
-pub struct Mutation(UserMutation, AssociationMutation, TransactionMutation);
+pub struct Mutation(
+    UserMutation,
+    AssociationMutation,
+    TransactionMutation,
+    RelationsMutation,
+);
 
-pub fn get_schema(db: DB) -> Schema<Query, Mutation, EmptySubscription> {
+pub fn get_schema(db: DB, config: Config) -> Schema<Query, Mutation, EmptySubscription> {
     Schema::build(Query::default(), Mutation::default(), EmptySubscription)
         .data(db)
+        .data(config)
         .finish()
 }

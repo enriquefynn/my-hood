@@ -1,4 +1,4 @@
-use async_graphql::SimpleObject;
+use async_graphql::{InputObject, SimpleObject};
 use bigdecimal::BigDecimal;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -6,19 +6,26 @@ use uuid::Uuid;
 
 use crate::DB;
 
-use super::graphql::TransactionInput;
-
 #[derive(SimpleObject, FromRow, Deserialize, Serialize)]
 pub struct Transaction {
-    id: Uuid,
+    pub id: Uuid,
+    pub association_id: Uuid,
+    pub creator_id: Uuid,
+    pub details: String,
+    pub amount: BigDecimal,
+    pub reference_date: chrono::NaiveDate,
+    pub deleted: bool,
+    pub created_at: chrono::NaiveDateTime,
+    pub updated_at: chrono::NaiveDateTime,
+}
+
+#[derive(InputObject)]
+pub struct TransactionInput {
     association_id: Uuid,
     creator_id: Uuid,
     details: String,
-    amount: BigDecimal,
+    amount: sqlx::types::BigDecimal,
     reference_date: chrono::NaiveDate,
-    deleted: bool,
-    created_at: chrono::NaiveDateTime,
-    updated_at: chrono::NaiveDateTime,
 }
 
 impl Transaction {
@@ -30,9 +37,16 @@ impl Transaction {
 
         let user = sqlx::query_as!(
             Transaction,
-            r#"INSERT INTO Transaction (association_id, creator_id, details, amount,
+            r#"
+            WITH valid_treasurer AS (
+                SELECT 1
+                FROM AssociationTreasurer
+                WHERE association_id = $1 AND user_id = $2
+            )
+            INSERT INTO Transaction (association_id, creator_id, details, amount,
                 reference_date)
-                VALUES ($1, $2, $3, $4, $5)
+                SELECT $1, $2, $3, $4, $5
+                FROM valid_treasurer
                 RETURNING *"#,
             transaction.association_id,
             transaction.creator_id,

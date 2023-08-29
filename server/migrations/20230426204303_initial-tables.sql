@@ -3,15 +3,15 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TABLE IF NOT EXISTS "User"(
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(250) NOT NULL,
-    birthday TIMESTAMP NOT NULL,
+    birthday DATE NOT NULL,
     address VARCHAR(250) NOT NULL,
     activity VARCHAR(250),
-    email VARCHAR(250),
+    email VARCHAR(250) UNIQUE,
     personal_phone VARCHAR(25),
     commercial_phone VARCHAR(25),
     uses_whatsapp BOOLEAN NOT NULL,
-    signed_at TIMESTAMP NOT NULL,
-    identities VARCHAR(1024) NOT NULL,
+    identities VARCHAR(1024),
+    profile_url VARCHAR(128),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -84,9 +84,26 @@ $$ language 'plpgsql';
 
 CREATE TRIGGER trigger_name_before_update
 BEFORE UPDATE ON "User"
-FOR EACH ROW 
 EXECUTE FUNCTION update_updated_at_column();
 
+CREATE TRIGGER trigger_name_before_update
+BEFORE UPDATE ON Association
+EXECUTE FUNCTION update_updated_at_column();
 
+CREATE TRIGGER trigger_name_before_update
+BEFORE UPDATE ON UserAssociation
+EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER trigger_name_before_update
+BEFORE UPDATE ON AssociationAdmin
+EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER trigger_name_before_update
+BEFORE UPDATE ON AssociationTreasurer
+EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER trigger_name_before_update
+BEFORE UPDATE ON Transaction
+EXECUTE FUNCTION update_updated_at_column();
 
 -- TODO: Suggestions, Votes.

@@ -1,8 +1,8 @@
-use async_graphql::{Context, FieldResult, InputObject, Object};
+use async_graphql::{Context, FieldResult, Object};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use super::model::Transaction;
+use super::model::{Transaction, TransactionInput};
 
 #[derive(Default)]
 pub struct TransactionQuery;
@@ -31,13 +31,4 @@ impl TransactionMutation {
         let user = Transaction::create(pool, transaction).await?;
         Ok(user)
     }
-}
-
-#[derive(InputObject)]
-pub struct TransactionInput {
-    pub association_id: Uuid,
-    pub creator_id: Uuid,
-    pub details: String,
-    pub amount: sqlx::types::BigDecimal,
-    pub reference_date: chrono::NaiveDate,
 }

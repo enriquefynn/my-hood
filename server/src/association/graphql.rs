@@ -1,14 +1,14 @@
-use async_graphql::{Context, FieldResult, InputObject, Object};
+use async_graphql::{Context, FieldResult, Object};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use super::model::Association;
+use super::model::{Association, AssociationInput};
 
 #[derive(Default)]
-pub struct UserQuery;
+pub struct AssociationQuery;
 
 #[Object(extends)]
-impl UserQuery {
+impl AssociationQuery {
     // Query association.
     async fn association(&self, ctx: &Context<'_>, id: Uuid) -> FieldResult<Association> {
         let pool = ctx.data::<PgPool>().unwrap();
@@ -18,10 +18,10 @@ impl UserQuery {
 }
 
 #[derive(Default)]
-pub struct UserMutation;
+pub struct AssociationMutation;
 
-#[Object(extends)]
-impl UserMutation {
+#[Object]
+impl AssociationMutation {
     // Mutate association.
     async fn create_association(
         &self,
@@ -32,14 +32,4 @@ impl UserMutation {
         let user = Association::create(pool, association).await?;
         Ok(user)
     }
-}
-
-#[derive(InputObject)]
-pub struct AssociationInput {
-    pub name: String,
-    pub neighborhood: String,
-    pub country: String,
-    pub state: String,
-    pub address: String,
-    pub identity: Option<String>,
 }

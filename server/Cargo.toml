@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-actix-web = "4.3.1"
+actix-web = { version = "4.3.1", features = ["cookies"] }
 actix-rt = "2.8.0"
 sqlx = { version = "0.6", default-features = false, features = ["migrate", "macros", "sqlite", "postgres", "runtime-actix-native-tls", "offline", "uuid", "chrono", "json", "bigdecimal"] } 
 serde = "1.0"
@@ -19,3 +19,5 @@ async-graphql-actix-web = "5.0.7"
 chrono = { version = "0.4.24", features = ["serde"] }
 uuid = { version = "1.3.1", features = ["serde", "v4"] }
 bigdecimal = { version = "0.3.1", features = ["serde"] }
+reqwest = { version = "0.11.20", features = ["json"] }
+jsonwebtoken = "8.3.0"
