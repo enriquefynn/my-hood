@@ -11,7 +11,7 @@ use async_graphql::{
 };
 use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse};
 use dotenv::dotenv;
-use server::{
+use my_hood_server::{
     config::Config,
     graphql::{get_schema, Mutation, Query},
     oauth::google_oauth_handler,
@@ -33,9 +33,8 @@ async fn oauth_redirect() -> impl Responder {
 
 #[actix_web::main]
 async fn main() -> anyhow::Result<()> {
-    std::env::set_var("RUST_LOG", "debug");
-    env_logger::init();
     dotenv().ok();
+    env_logger::init();
 
     let db_url = env::var("DATABASE_URL").unwrap();
     let db = PgPool::connect(&db_url).await.unwrap();
