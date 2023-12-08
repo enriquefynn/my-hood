@@ -1,7 +1,7 @@
 use std::env;
 
 use actix_web::{
-    get, guard,
+    guard,
     web::{self, Data},
     App, HttpResponse, HttpServer, Responder,
 };
