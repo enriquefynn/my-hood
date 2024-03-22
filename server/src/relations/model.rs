@@ -49,7 +49,7 @@ impl Relations {
             user_id,
             association_id,
         )
-        .fetch_one(&mut tx)
+        .fetch_one(&mut *tx)
         .await?;
         tx.commit().await?;
 
@@ -75,7 +75,7 @@ impl Relations {
             start_date,
             end_date
         )
-        .fetch_one(&mut tx)
+        .fetch_one(&mut *tx)
         .await?;
         tx.commit().await?;
 

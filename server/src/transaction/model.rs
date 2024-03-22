@@ -54,7 +54,7 @@ impl Transaction {
             transaction.amount,
             transaction.reference_date,
         )
-        .fetch_one(&mut tx)
+        .fetch_one(&mut *tx)
         .await?;
         tx.commit().await?;
 
@@ -68,7 +68,7 @@ impl Transaction {
             r#"SELECT * FROM Transaction WHERE id = $1"#,
             id
         )
-        .fetch_one(&mut tx)
+        .fetch_one(&mut *tx)
         .await?;
         Ok(user)
     }
@@ -76,7 +76,7 @@ impl Transaction {
     pub async fn read_all(db: DB) -> Result<Vec<Transaction>, anyhow::Error> {
         let mut tx = db.begin().await?;
         let users = sqlx::query_as!(Transaction, r#"SELECT * FROM Transaction"#)
-            .fetch_all(&mut tx)
+            .fetch_all(&mut *tx)
             .await?;
         Ok(users)
     }

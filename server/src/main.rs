@@ -1,39 +1,22 @@
 use std::env;
 
-use actix_web::{
-    guard,
-    web::{self, Data},
-    App, HttpResponse, HttpServer, Responder,
+use async_graphql::http::GraphiQLSource;
+use async_graphql_axum::GraphQL;
+use axum::{
+    response::{self, IntoResponse},
+    routing::get,
+    Router,
 };
-use async_graphql::{
-    http::{playground_source, GraphQLPlaygroundConfig},
-    EmptySubscription, Schema,
-};
-use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse};
 use dotenv::dotenv;
-use my_hood_server::{
-    config::Config,
-    graphql::{get_schema, Mutation, Query},
-    oauth::google_oauth_handler,
-};
+use my_hood_server::{config::Config, graphql::get_schema};
 use sqlx::PgPool;
+use tokio::net::TcpListener;
 
 mod utils;
 
-async fn oauth_redirect() -> impl Responder {
-    let google_auth_url = format!(
-        "https://accounts.google.com/o/oauth2/v2/auth?client_id={}&redirect_uri={}&response_type=code&scope=email%20profile",
-        env::var("CLIENT_ID").unwrap(),
-        "http://localhost:8000/oauth/callback"
-    );
-    HttpResponse::Found()
-        .append_header(("location", google_auth_url.as_str()))
-        .finish()
-}
-
-#[actix_web::main]
+#[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    dotenv().ok();
+    dotenv()?;
     env_logger::init();
 
     let db_url = env::var("DATABASE_URL").unwrap();
@@ -44,38 +27,22 @@ async fn main() -> anyhow::Result<()> {
 
     let config = Config::new();
 
-    // Graphql entry.
-    async fn index(
-        schema: Data<Schema<Query, Mutation, EmptySubscription>>,
-        req: GraphQLRequest,
-    ) -> GraphQLResponse {
-        schema.execute(req.into_inner()).await.into()
-    }
-
     let schema = get_schema(db.clone(), config.clone());
 
-    async fn graphql_playground() -> HttpResponse {
-        HttpResponse::Ok()
-            .content_type("text/html; charset=utf-8")
-            .body(playground_source(GraphQLPlaygroundConfig::new("/")))
+    async fn graphql_playground() -> impl IntoResponse {
+        response::Html(GraphiQLSource::build().endpoint("/").finish())
     }
 
-    HttpServer::new(move || {
-        App::new()
-            .app_data(Data::new(schema.clone()))
-            .app_data(Data::new(db.clone()))
-            .app_data(Data::new(config.clone()))
-            .service(web::resource("/").guard(guard::Post()).to(index))
-            .service(google_oauth_handler)
-            .service(
-                web::resource("/")
-                    .guard(guard::Get())
-                    .to(graphql_playground),
-            )
-    })
-    .bind(format!("{host}:{port}"))?
-    .run()
-    .await?;
-
+    let app = Router::new().route(
+        "/",
+        get(graphql_playground).post_service(GraphQL::new(schema)),
+    );
+    println!("Serving on http://{host}:{port}");
+    axum::serve(
+        TcpListener::bind(format!("{host}:{port}")).await.unwrap(),
+        app,
+    )
+    .await
+    .expect("Error spawning server");
     Ok(())
 }

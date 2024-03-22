@@ -67,7 +67,7 @@ impl Association {
         INNER JOIN UserAssociation ua ON a.id = ua.user_id WHERE ua.association_id = $1"#,
             self.id
         )
-        .fetch_all(&mut tx)
+        .fetch_all(&mut *tx)
         .await?;
         Ok(users)
     }
@@ -88,7 +88,7 @@ impl Association {
             from_date,
             to_date
         )
-        .fetch_all(&mut tx)
+        .fetch_all(&mut *tx)
         .await?;
 
         Ok(transactions)
@@ -127,7 +127,7 @@ impl Association {
             association.address,
             association.identity,
         )
-        .fetch_one(&mut tx)
+        .fetch_one(&mut *tx)
         .await?;
         tx.commit().await?;
 
@@ -141,7 +141,7 @@ impl Association {
             r#"SELECT * FROM Association WHERE id = $1"#,
             id
         )
-        .fetch_one(&mut tx)
+        .fetch_one(&mut *tx)
         .await?;
         Ok(user)
     }
@@ -149,7 +149,7 @@ impl Association {
     pub async fn read_all(db: DB) -> Result<Vec<Association>, anyhow::Error> {
         let mut tx = db.begin().await?;
         let users = sqlx::query_as!(Association, r#"SELECT * FROM Association"#)
-            .fetch_all(&mut tx)
+            .fetch_all(&mut *tx)
             .await?;
         Ok(users)
     }

@@ -1,7 +1,5 @@
 use std::fmt;
 
-use actix_web::{HttpResponse, ResponseError};
-
 #[derive(Debug)]
 pub struct HoodError {
     pub msg: String,
@@ -13,8 +11,8 @@ impl fmt::Display for HoodError {
     }
 }
 
-impl ResponseError for HoodError {
-    fn error_response(&self) -> HttpResponse {
-        HttpResponse::BadRequest().body(self.msg.clone())
-    }
-}
+// impl ResponseError for HoodError {
+//     fn error_response(&self) -> HttpResponse {
+//         HttpResponse::BadRequest().body(self.msg.clone())
+//     }
+// }

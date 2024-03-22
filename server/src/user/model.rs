@@ -88,7 +88,7 @@ impl User {
         INNER JOIN UserAssociation ua ON a.id = ua.association_id WHERE ua.user_id = $1"#,
             self.id
         )
-        .fetch_all(&mut tx)
+        .fetch_all(&mut *tx)
         .await?;
         Ok(associations)
     }
@@ -131,7 +131,7 @@ impl User {
             user.identities,
             user.profile_url,
         )
-        .fetch_one(&mut tx)
+        .fetch_one(&mut *tx)
         .await?;
         tx.commit().await?;
 
@@ -141,7 +141,7 @@ impl User {
     pub async fn read_one(db: &DB, id: &Uuid) -> Result<User, anyhow::Error> {
         let mut tx = db.begin().await?;
         let user = sqlx::query_as!(User, r#"SELECT * FROM "User" WHERE id = $1"#, id)
-            .fetch_one(&mut tx)
+            .fetch_one(&mut *tx)
             .await?;
         Ok(user)
     }
@@ -149,7 +149,7 @@ impl User {
     pub async fn read_one_by_email(db: &DB, email: &str) -> Result<Option<User>, anyhow::Error> {
         let mut tx = db.begin().await?;
         let user = sqlx::query_as!(User, r#"SELECT * FROM "User" WHERE email = $1"#, email)
-            .fetch_optional(&mut tx)
+            .fetch_optional(&mut *tx)
             .await?;
         Ok(user)
     }
@@ -157,7 +157,7 @@ impl User {
     pub async fn read_all(db: DB) -> Result<Vec<User>, anyhow::Error> {
         let mut tx = db.begin().await?;
         let users = sqlx::query_as!(User, r#"SELECT * FROM "User""#)
-            .fetch_all(&mut tx)
+            .fetch_all(&mut *tx)
             .await?;
         Ok(users)
     }

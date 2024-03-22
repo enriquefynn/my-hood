@@ -29,7 +29,7 @@ impl AssociationMutation {
         association: AssociationInput,
     ) -> FieldResult<Association> {
         let pool = ctx.data::<PgPool>().unwrap();
-        let user = Association::create(pool, association).await?;
-        Ok(user)
+        let association = Association::create(pool, association).await?;
+        Ok(association)
     }
 }
