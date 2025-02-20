@@ -13,7 +13,7 @@ pub struct UserAssociation {
     updated_at: chrono::NaiveDateTime,
 }
 
-#[derive(InputObject)]
+#[derive(SimpleObject)]
 pub struct AssociationAdmin {
     user_id: Uuid,
     association_id: Uuid,
@@ -82,6 +82,28 @@ impl Relations {
         Ok(association_treasurer)
     }
 
+    pub async fn create_admin(
+        db: &DB,
+        user_id: Uuid,
+        association_id: Uuid,
+    ) -> Result<AssociationAdmin, anyhow::Error> {
+        let mut tx = db.begin().await?;
+
+        let association_admin = sqlx::query_as!(
+            AssociationAdmin,
+            r#"INSERT INTO "AssociationAdmin" (user_id, association_id)
+                VALUES ($1, $2)
+                RETURNING *"#,
+            user_id,
+            association_id,
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+        tx.commit().await?;
+
+        Ok(association_admin)
+    }
+
     pub async fn is_admin(
         ctx: &Context<'_>,
         user_id: Uuid,
@@ -89,7 +111,7 @@ impl Relations {
     ) -> Result<bool, anyhow::Error> {
         let pool = ctx.data::<PgPool>().unwrap();
         let is_admin: Option<(Uuid,)> = sqlx::query_as(
-            r#"SELECT user_id FROM AssociationAdmin WHERE user_id = $1 AND association_id = $2"#,
+            r#"SELECT user_id FROM "AssociationAdmin" WHERE user_id = $1 AND association_id = $2"#,
         )
         .bind(user_id)
         .bind(association_id)
@@ -105,7 +127,7 @@ impl Relations {
     ) -> Result<bool, anyhow::Error> {
         let pool = ctx.data::<PgPool>().unwrap();
         let is_admin: Option<(Uuid,)> = sqlx::query_as(
-            r#"SELECT user_id FROM AssociationTreasurer WHERE user_id = $1 AND association_id = $2"#,
+            r#"SELECT user_id FROM "AssociationTreasurer" WHERE user_id = $1 AND association_id = $2"#,
         )
         .bind(user_id)
         .bind(association_id)

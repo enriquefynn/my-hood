@@ -2,7 +2,7 @@ use async_graphql::{Context, FieldResult, Object};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use super::model::{AssociationTreasurer, Relations, UserAssociation};
+use super::model::{AssociationAdmin, AssociationTreasurer, Relations, UserAssociation};
 
 #[derive(Default)]
 pub struct RelationsMutation;
@@ -33,5 +33,16 @@ impl RelationsMutation {
             Relations::create_treasurer(pool, user_id, association_id, start_date, end_date)
                 .await?;
         Ok(association_treasurer)
+    }
+
+    async fn create_association_admin(
+        &self,
+        ctx: &Context<'_>,
+        user_id: Uuid,
+        association_id: Uuid,
+    ) -> FieldResult<AssociationAdmin> {
+        let pool = ctx.data::<PgPool>().unwrap();
+        let association_admin = Relations::create_admin(pool, user_id, association_id).await?;
+        Ok(association_admin)
     }
 }
