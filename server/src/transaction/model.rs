@@ -40,10 +40,10 @@ impl Transaction {
             r#"
             WITH valid_treasurer AS (
                 SELECT 1
-                FROM AssociationTreasurer
+                FROM "AssociationTreasurer"
                 WHERE association_id = $1 AND user_id = $2
             )
-            INSERT INTO Transaction (association_id, creator_id, details, amount,
+            INSERT INTO "Transaction" (association_id, creator_id, details, amount,
                 reference_date)
                 SELECT $1, $2, $3, $4, $5
                 FROM valid_treasurer
@@ -65,7 +65,7 @@ impl Transaction {
         let mut tx = db.begin().await?;
         let user = sqlx::query_as!(
             Transaction,
-            r#"SELECT * FROM Transaction WHERE id = $1"#,
+            r#"SELECT * FROM "Transaction" WHERE id = $1"#,
             id
         )
         .fetch_one(&mut *tx)
@@ -75,7 +75,7 @@ impl Transaction {
 
     pub async fn read_all(db: DB) -> Result<Vec<Transaction>, anyhow::Error> {
         let mut tx = db.begin().await?;
-        let users = sqlx::query_as!(Transaction, r#"SELECT * FROM Transaction"#)
+        let users = sqlx::query_as!(Transaction, r#"SELECT * FROM "Transaction""#)
             .fetch_all(&mut *tx)
             .await?;
         Ok(users)

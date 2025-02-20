@@ -84,8 +84,8 @@ impl User {
         let mut tx = pool.begin().await?;
         let associations = sqlx::query_as!(
             Association,
-            r#"SELECT a.* FROM Association a 
-        INNER JOIN UserAssociation ua ON a.id = ua.association_id WHERE ua.user_id = $1"#,
+            r#"SELECT a.* FROM "Association" a 
+        INNER JOIN "UserAssociation" ua ON a.id = ua.association_id WHERE ua.user_id = $1"#,
             self.id
         )
         .fetch_all(&mut *tx)

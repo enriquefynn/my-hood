@@ -43,7 +43,7 @@ impl Relations {
 
         let user_association = sqlx::query_as!(
             UserAssociation,
-            r#"INSERT INTO UserAssociation (user_id, association_id)
+            r#"INSERT INTO "UserAssociation" (user_id, association_id)
                 VALUES ($1, $2)
                 RETURNING *"#,
             user_id,
@@ -67,7 +67,7 @@ impl Relations {
 
         let association_treasurer = sqlx::query_as!(
             AssociationTreasurer,
-            r#"INSERT INTO AssociationTreasurer (user_id, association_id, start_date, end_date)
+            r#"INSERT INTO "AssociationTreasurer" (user_id, association_id, start_date, end_date)
                 VALUES ($1, $2, $3, $4)
                 RETURNING *"#,
             user_id,

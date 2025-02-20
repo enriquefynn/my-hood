@@ -110,7 +110,6 @@ mod tests {
                 birthday,
                 address,
                 usesWhatsapp,
-                id
             }
         }
         "#;
@@ -148,11 +147,6 @@ mod tests {
                 address: "Rua A nr 1",
                 usesWhatsapp: true
             }) {
-                name,
-                email,
-                birthday,
-                address,
-                usesWhatsapp,
                 id
             }
         }
@@ -160,10 +154,33 @@ mod tests {
 
         let request = async_graphql::Request::new(create_user_mutation.to_string());
         let response = schema.execute(request).await.data.into_value();
+        let user = response.into_json().unwrap();
+        let user_id = user
+            .get("createUser")
+            .unwrap()
+            .get("id")
+            .unwrap()
+            .as_str()
+            .unwrap();
+
+        let get_user_query = format!(
+            r#"query {{
+                user(id: "{}") {{
+                    name,
+                    email,
+                    birthday,
+                    address,
+                    usesWhatsapp,
+                }}
+            }}"#,
+            user_id
+        );
+        let request = async_graphql::Request::new(get_user_query);
+        let response = schema.execute(request).await.data.into_value();
 
         let expected_response = serde_json::from_str(
             r#"{
-                "createUser": {
+                "user": {
                     "name": "Test User",
                     "email": "test@gmail.com",
                     "birthday": "2012-11-19",

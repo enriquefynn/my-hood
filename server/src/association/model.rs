@@ -64,7 +64,7 @@ impl Association {
         let users = sqlx::query_as!(
             User,
             r#"SELECT a.* FROM "User" a 
-        INNER JOIN UserAssociation ua ON a.id = ua.user_id WHERE ua.association_id = $1"#,
+        INNER JOIN "UserAssociation" ua ON a.id = ua.user_id WHERE ua.association_id = $1"#,
             self.id
         )
         .fetch_all(&mut *tx)
@@ -83,7 +83,7 @@ impl Association {
 
         let transactions = sqlx::query_as!(
             Transaction,
-            r#"SELECT * FROM Transaction WHERE association_id = $1 AND reference_date >= $2 AND reference_date < $3"#,
+            r#"SELECT * FROM "Transaction" WHERE association_id = $1 AND reference_date >= $2 AND reference_date < $3"#,
             self.id,
             from_date,
             to_date
@@ -116,7 +116,7 @@ impl Association {
 
         let user = sqlx::query_as!(
             Association,
-            r#"INSERT INTO Association (name, neighborhood, country, state, address,
+            r#"INSERT INTO "Association" (name, neighborhood, country, state, address,
                 identity)
                 VALUES ($1, $2, $3, $4, $5, $6)
                 RETURNING *"#,
@@ -138,7 +138,7 @@ impl Association {
         let mut tx = db.begin().await?;
         let user = sqlx::query_as!(
             Association,
-            r#"SELECT * FROM Association WHERE id = $1"#,
+            r#"SELECT * FROM "Association" WHERE id = $1"#,
             id
         )
         .fetch_one(&mut *tx)
@@ -148,7 +148,7 @@ impl Association {
 
     pub async fn read_all(db: DB) -> Result<Vec<Association>, anyhow::Error> {
         let mut tx = db.begin().await?;
-        let users = sqlx::query_as!(Association, r#"SELECT * FROM Association"#)
+        let users = sqlx::query_as!(Association, r#"SELECT * FROM "Association""#)
             .fetch_all(&mut *tx)
             .await?;
         Ok(users)
