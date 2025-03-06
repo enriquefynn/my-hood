@@ -10,9 +10,8 @@ mod tests {
         Json, Router,
     };
     use dotenv::dotenv;
-    use my_hood_server::{config::Config, graphql::get_schema, index, DB};
+    use my_hood_server::{config::Config, graphql::get_schema, DB};
     use serde_json::{json, Value};
-    use sqlx::PgPool;
     use tokio::net::unix::SocketAddr;
     use tower::{Service, ServiceExt}; // for `call`, `oneshot`, and `ready`
 
@@ -42,7 +41,7 @@ mod tests {
     async fn setup_db() -> DB {
         dotenv().unwrap();
         let db_url = env::var("DATABASE_URL").unwrap();
-        let db = PgPool::connect(&db_url).await.unwrap();
+        let db = DB::connect(&db_url).await.unwrap();
         sqlx::query!("DROP SCHEMA IF EXISTS public CASCADE")
             .execute(&db)
             .await

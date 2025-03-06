@@ -1,6 +1,7 @@
 use async_graphql::{Context, FieldResult, Object};
-use sqlx::PgPool;
 use uuid::Uuid;
+
+use crate::{token::Claims, DB};
 
 use super::model::{Association, AssociationInput};
 
@@ -11,7 +12,7 @@ pub struct AssociationQuery;
 impl AssociationQuery {
     // Query association.
     async fn association(&self, ctx: &Context<'_>, id: Uuid) -> FieldResult<Association> {
-        let pool = ctx.data::<PgPool>().unwrap();
+        let pool = ctx.data::<DB>().unwrap();
         let user = Association::read_one(pool, &id).await?;
         Ok(user)
     }
@@ -28,8 +29,14 @@ impl AssociationMutation {
         ctx: &Context<'_>,
         association: AssociationInput,
     ) -> FieldResult<Association> {
-        let pool = ctx.data::<PgPool>().unwrap();
-        let association = Association::create(pool, association).await?;
+        let claims = ctx.data::<Claims>()?;
+
+        let user_id = claims
+            .sub
+            .ok_or(anyhow::Error::msg("Unauthorized, please log in"))?;
+
+        let pool = ctx.data::<DB>().unwrap();
+        let association = Association::create(pool, user_id, association).await?;
         Ok(association)
     }
 }

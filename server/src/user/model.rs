@@ -1,6 +1,6 @@
 use async_graphql::{Context, InputObject, Object};
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, PgPool};
+use sqlx::FromRow;
 use uuid::Uuid;
 
 use crate::{association::model::Association, relations::model::Relations, DB};
@@ -9,6 +9,7 @@ use crate::{association::model::Association, relations::model::Relations, DB};
 pub struct User {
     pub id: Uuid,
     pub name: String,
+    pub password_hash: Option<String>,
     pub birthday: chrono::NaiveDate,
     pub address: String,
     pub activity: Option<String>,
@@ -25,6 +26,7 @@ pub struct User {
 #[derive(Debug, InputObject, Deserialize)]
 pub struct UserInput {
     // Set as pub so we can reuse this struct for Oauth.
+    pub password_hash: Option<String>,
     pub name: Option<String>,
     pub email: Option<String>,
     pub profile_url: Option<String>,
@@ -80,7 +82,7 @@ impl User {
     }
 
     pub async fn associations(&self, ctx: &Context<'_>) -> Result<Vec<Association>, anyhow::Error> {
-        let pool = ctx.data::<PgPool>().unwrap();
+        let pool = ctx.data::<DB>().unwrap();
         let mut tx = pool.begin().await?;
         let associations = sqlx::query_as!(
             Association,
@@ -116,10 +118,11 @@ impl User {
 
         let user = sqlx::query_as!(
             User,
-            r#"INSERT INTO "User" (name, birthday, address, activity, email, personal_phone,
+            r#"INSERT INTO "User" (password_hash, name, birthday, address, activity, email, personal_phone,
                 commercial_phone, uses_whatsapp, identities, profile_url)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                 RETURNING *"#,
+            user.password_hash,
             user.name,
             user.birthday,
             user.address,

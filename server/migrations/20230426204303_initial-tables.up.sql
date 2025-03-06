@@ -2,6 +2,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- Add migration script here
 CREATE TABLE IF NOT EXISTS "User" (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    password_hash VARCHAR(250),
     name VARCHAR(250) NOT NULL,
     birthday DATE NOT NULL,
     address VARCHAR(250) NOT NULL,
@@ -9,7 +10,7 @@ CREATE TABLE IF NOT EXISTS "User" (
     email VARCHAR(250) UNIQUE,
     personal_phone VARCHAR(25),
     commercial_phone VARCHAR(25),
-    uses_whatsapp BOOLEAN NOT NULL,
+    uses_whatsapp BOOLEAN NOT NULL DEFAULT TRUE,
     identities VARCHAR(1024),
     profile_url VARCHAR(128),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -33,6 +34,14 @@ CREATE TABLE IF NOT EXISTS "UserAssociation" (
     user_id UUID NOT NULL REFERENCES "User"(id),
     association_id UUID NOT NULL REFERENCES "Association"(id),
     PRIMARY KEY (user_id, association_id),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS "GlobalAdmin" (
+    user_id UUID NOT NULL,
+    PRIMARY KEY (user_id),
+    FOREIGN KEY (user_id) REFERENCES "User"(id),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -84,6 +93,10 @@ $$ language 'plpgsql';
 
 CREATE TRIGGER trigger_name_before_update
 BEFORE UPDATE ON "User"
+EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER trigger_name_before_update
+BEFORE UPDATE ON "GlobalAdmin"
 EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER trigger_name_before_update

@@ -1,6 +1,6 @@
-use async_graphql::{Context, InputObject, SimpleObject};
+use async_graphql::{Context, SimpleObject};
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, PgPool};
+use sqlx::FromRow;
 use uuid::Uuid;
 
 use crate::DB;
@@ -15,10 +15,10 @@ pub struct UserAssociation {
 
 #[derive(SimpleObject)]
 pub struct AssociationAdmin {
-    user_id: Uuid,
-    association_id: Uuid,
-    created_at: chrono::NaiveDateTime,
-    updated_at: chrono::NaiveDateTime,
+    pub user_id: Uuid,
+    pub association_id: Uuid,
+    pub created_at: chrono::NaiveDateTime,
+    pub updated_at: chrono::NaiveDateTime,
 }
 
 #[derive(SimpleObject)]
@@ -109,7 +109,7 @@ impl Relations {
         user_id: Uuid,
         association_id: Uuid,
     ) -> Result<bool, anyhow::Error> {
-        let pool = ctx.data::<PgPool>().unwrap();
+        let pool = ctx.data::<DB>().unwrap();
         let is_admin: Option<(Uuid,)> = sqlx::query_as(
             r#"SELECT user_id FROM "AssociationAdmin" WHERE user_id = $1 AND association_id = $2"#,
         )
@@ -125,7 +125,7 @@ impl Relations {
         user_id: Uuid,
         association_id: Uuid,
     ) -> Result<bool, anyhow::Error> {
-        let pool = ctx.data::<PgPool>().unwrap();
+        let pool = ctx.data::<DB>().unwrap();
         let is_admin: Option<(Uuid,)> = sqlx::query_as(
             r#"SELECT user_id FROM "AssociationTreasurer" WHERE user_id = $1 AND association_id = $2"#,
         )

@@ -6,8 +6,11 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-axum = "0.8.1"
+axum = { version = "0.8.1", features = ["macros"] }
+async-trait = "0.1.86"
 async-graphql-value = "7.0.15"
+bcrypt = "0.17.0"
+clap = { version = "4.5.31", features = ["derive"] }
 tokio = { version = "1.43.0", features = ["full"] }
 sqlx = { version = "0.8.3", default-features = false, features = ["migrate", "macros", "sqlite", "postgres", "runtime-tokio-native-tls", "uuid", "chrono", "json", "bigdecimal"] } 
 serde = "1.0"

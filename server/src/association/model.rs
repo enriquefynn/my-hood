@@ -1,9 +1,14 @@
 use async_graphql::{Context, InputObject, Object};
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, PgPool};
+use sqlx::FromRow;
 use uuid::Uuid;
 
-use crate::{relations::model::Relations, transaction::model::Transaction, user::model::User, DB};
+use crate::{
+    relations::model::{AssociationAdmin, Relations},
+    transaction::model::Transaction,
+    user::model::User,
+    DB,
+};
 
 #[derive(FromRow, Deserialize, Serialize)]
 pub struct Association {
@@ -59,7 +64,7 @@ impl Association {
     }
 
     pub async fn users(&self, ctx: &Context<'_>) -> Result<Vec<User>, anyhow::Error> {
-        let pool = ctx.data::<PgPool>().unwrap();
+        let pool = ctx.data::<DB>().unwrap();
         let mut tx: sqlx::Transaction<'_, sqlx::Postgres> = pool.begin().await?;
         let users = sqlx::query_as!(
             User,
@@ -78,7 +83,7 @@ impl Association {
         from_date: chrono::NaiveDate,
         to_date: chrono::NaiveDate,
     ) -> Result<Vec<Transaction>, anyhow::Error> {
-        let pool = ctx.data::<PgPool>().unwrap();
+        let pool = ctx.data::<DB>().unwrap();
         let mut tx: sqlx::Transaction<'_, sqlx::Postgres> = pool.begin().await?;
 
         let transactions = sqlx::query_as!(
@@ -110,11 +115,11 @@ impl Association {
 impl Association {
     pub async fn create(
         db: &DB,
+        user_id: Uuid,
         association: AssociationInput,
     ) -> Result<Association, anyhow::Error> {
         let mut tx = db.begin().await?;
-
-        let user = sqlx::query_as!(
+        let association = sqlx::query_as!(
             Association,
             r#"INSERT INTO "Association" (name, neighborhood, country, state, address,
                 identity)
@@ -129,21 +134,32 @@ impl Association {
         )
         .fetch_one(&mut *tx)
         .await?;
+
+        sqlx::query_as!(
+            AssociationAdmin,
+            r#"INSERT INTO "AssociationAdmin" (user_id, association_id)
+            VALUES ($1, $2)
+            RETURNING *"#,
+            user_id,
+            association.id,
+        )
+        .fetch_one(&mut *tx)
+        .await?;
         tx.commit().await?;
 
-        Ok(user)
+        Ok(association)
     }
 
     pub async fn read_one(db: &DB, id: &Uuid) -> Result<Association, anyhow::Error> {
         let mut tx = db.begin().await?;
-        let user = sqlx::query_as!(
+        let association = sqlx::query_as!(
             Association,
             r#"SELECT * FROM "Association" WHERE id = $1"#,
             id
         )
         .fetch_one(&mut *tx)
         .await?;
-        Ok(user)
+        Ok(association)
     }
 
     pub async fn read_all(db: DB) -> Result<Vec<Association>, anyhow::Error> {
