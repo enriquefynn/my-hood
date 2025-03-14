@@ -23,6 +23,7 @@ pub enum Roles {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {
     pub sub: Option<uuid::Uuid>,
+    pub email: Option<String>,
     pub exp: usize,
     pub roles: Vec<Roles>,
 }
@@ -92,7 +93,7 @@ fn validate_token(token: &str) -> Result<Claims, Error> {
 
 /// Request payload for logging in.
 #[derive(Debug, Deserialize)]
-pub struct LoginRequest {
+pub struct LoginOrCreateRequest {
     email: String,
     password: String,
 }
@@ -103,9 +104,16 @@ pub struct LoginResponse {
     token: String,
 }
 
+pub fn get_token_exp() -> usize {
+    Utc::now()
+        .checked_add_signed(Duration::hours(24))
+        .expect("valid timestamp")
+        .timestamp() as usize
+}
+
 pub async fn login_handler(
     Extension(db): Extension<DB>,
-    Json(payload): Json<LoginRequest>,
+    Json(payload): Json<LoginOrCreateRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, &'static str)> {
     let secret = env::var("SECRET").expect("SECRET must be set");
 
@@ -123,10 +131,7 @@ pub async fn login_handler(
     .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid credentials"))?;
 
     // Create a token that expires in 24 hours.
-    let exp = Utc::now()
-        .checked_add_signed(Duration::hours(24))
-        .expect("valid timestamp")
-        .timestamp() as usize;
+    let exp = get_token_exp();
 
     let claims = match user {
         Some(user) => {
@@ -155,10 +160,16 @@ pub async fn login_handler(
             if global_admin.is_some() {
                 roles.push(Roles::GlobalAdmin);
             }
-            Claims { sub, exp, roles }
+            Claims {
+                sub,
+                email: user.email,
+                exp,
+                roles,
+            }
         }
         None => Claims {
             sub: None,
+            email: None,
             exp,
             roles: vec![],
         },
@@ -173,4 +184,11 @@ pub async fn login_handler(
     .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Token creation failed"))?;
 
     return Ok(Json(LoginResponse { token }));
+}
+
+// TODO: Send email with verification code etc.
+pub async fn create_user(
+    Extension(_db): Extension<DB>,
+    Json(_payload): Json<LoginOrCreateRequest>,
+) {
 }

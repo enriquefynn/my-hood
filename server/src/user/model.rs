@@ -100,7 +100,7 @@ impl User {
         ctx: &Context<'_>,
         association_id: Uuid,
     ) -> Result<bool, anyhow::Error> {
-        Relations::is_admin(ctx, self.id, association_id).await
+        Relations::is_admin(ctx, &self.id, association_id).await
     }
 
     pub async fn is_treasurer(
@@ -109,6 +109,14 @@ impl User {
         association_id: Uuid,
     ) -> Result<bool, anyhow::Error> {
         Relations::is_treasurer(ctx, self.id, association_id).await
+    }
+
+    pub async fn pending(
+        &self,
+        ctx: &Context<'_>,
+        association_id: Uuid,
+    ) -> Result<bool, anyhow::Error> {
+        Relations::is_pending(ctx, self.id, association_id).await
     }
 }
 
@@ -163,5 +171,27 @@ impl User {
             .fetch_all(&mut *tx)
             .await?;
         Ok(users)
+    }
+
+    pub async fn toggle_approve(
+        db: &DB,
+        user_id: &Uuid,
+        association_id: &Uuid,
+    ) -> Result<bool, anyhow::Error> {
+        let mut tx = db.begin().await?;
+        let pending: bool = sqlx::query_scalar!(
+            r#"
+                UPDATE "UserAssociation"
+                SET pending = not pending
+                WHERE user_id = $1 AND association_id = $2
+                RETURNING pending
+                "#,
+            user_id,
+            association_id
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(pending)
     }
 }

@@ -9,11 +9,12 @@ use crate::DB;
 pub struct UserAssociation {
     user_id: Uuid,
     association_id: Uuid,
+    pending: bool,
     created_at: chrono::NaiveDateTime,
     updated_at: chrono::NaiveDateTime,
 }
 
-#[derive(SimpleObject)]
+#[derive(Debug, SimpleObject)]
 pub struct AssociationAdmin {
     pub user_id: Uuid,
     pub association_id: Uuid,
@@ -106,15 +107,15 @@ impl Relations {
 
     pub async fn is_admin(
         ctx: &Context<'_>,
-        user_id: Uuid,
+        user_id: &Uuid,
         association_id: Uuid,
     ) -> Result<bool, anyhow::Error> {
         let pool = ctx.data::<DB>().unwrap();
-        let is_admin: Option<(Uuid,)> = sqlx::query_as(
+        let is_admin = sqlx::query!(
             r#"SELECT user_id FROM "AssociationAdmin" WHERE user_id = $1 AND association_id = $2"#,
+            user_id,
+            association_id
         )
-        .bind(user_id)
-        .bind(association_id)
         .fetch_optional(pool)
         .await?;
         Ok(is_admin.is_some())
@@ -126,13 +127,45 @@ impl Relations {
         association_id: Uuid,
     ) -> Result<bool, anyhow::Error> {
         let pool = ctx.data::<DB>().unwrap();
-        let is_admin: Option<(Uuid,)> = sqlx::query_as(
+        let is_admin =sqlx::query!(
             r#"SELECT user_id FROM "AssociationTreasurer" WHERE user_id = $1 AND association_id = $2"#,
+            user_id,
+            association_id
         )
-        .bind(user_id)
-        .bind(association_id)
         .fetch_optional(pool)
         .await?;
         Ok(is_admin.is_some())
+    }
+
+    pub async fn is_member(
+        ctx: &Context<'_>,
+        user_id: Uuid,
+        association_id: Uuid,
+    ) -> Result<bool, anyhow::Error> {
+        let pool = ctx.data::<DB>().unwrap();
+        let is_member = sqlx::query!(
+            r#"SELECT user_id FROM "UserAssociation" WHERE user_id = $1 AND association_id = $2"#,
+            user_id,
+            association_id
+        )
+        .fetch_optional(pool)
+        .await?;
+        Ok(is_member.is_some())
+    }
+
+    pub async fn is_pending(
+        ctx: &Context<'_>,
+        user_id: Uuid,
+        association_id: Uuid,
+    ) -> Result<bool, anyhow::Error> {
+        let pool = ctx.data::<DB>().unwrap();
+        let pending: bool = sqlx::query_scalar!(
+            r#"SELECT pending FROM "UserAssociation" WHERE user_id = $1 AND association_id = $2"#,
+            user_id,
+            association_id
+        )
+        .fetch_one(pool)
+        .await?;
+        Ok(pending)
     }
 }

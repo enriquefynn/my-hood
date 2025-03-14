@@ -11,6 +11,7 @@ use dotenv::dotenv;
 use my_hood_server::{
     config::Config,
     graphql::{get_schema, graphql_handler},
+    oauth::{callback_handler, google_oauth_client},
     token::login_handler,
     user::model::User,
     DB,
@@ -56,13 +57,10 @@ async fn run() -> anyhow::Result<()> {
     }
 
     let app = Router::new()
-        .route(
-            "/",
-            get(graphql_playground)
-                // get(graphql_playground).post_service(GraphQL::new(schema)),
-                .post(post(graphql_handler)),
-        )
+        .route("/", get(graphql_playground).post(post(graphql_handler)))
         .route("/auth", post(login_handler))
+        .route("/oauth/google/login", get(google_oauth_client))
+        .route("/oauth/google/callback", get(callback_handler))
         .layer(Extension(schema))
         .layer(Extension(db));
     println!("Serving on http://{host}:{port}");

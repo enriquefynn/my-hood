@@ -1,4 +1,5 @@
 DROP TABLE IF EXISTS "User";
+DROP TABLE IF EXISTS "GlobalAdmin";
 DROP TABLE IF EXISTS "Association";
 DROP TABLE IF EXISTS "UserAssociation";
 DROP TABLE IF EXISTS "AssociationAdmin";

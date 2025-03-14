@@ -10,7 +10,7 @@ use crate::{
     DB,
 };
 
-#[derive(FromRow, Deserialize, Serialize)]
+#[derive(Debug, FromRow, Deserialize, Serialize)]
 pub struct Association {
     pub id: Uuid,
     pub name: String,
@@ -19,6 +19,7 @@ pub struct Association {
     pub state: String,
     pub address: String,
     pub identity: Option<String>,
+    pub public: bool,
     pub created_at: chrono::NaiveDateTime,
     pub updated_at: chrono::NaiveDateTime,
 }
@@ -63,6 +64,10 @@ impl Association {
         self.identity.to_owned()
     }
 
+    pub async fn public(&self) -> bool {
+        self.public
+    }
+
     pub async fn users(&self, ctx: &Context<'_>) -> Result<Vec<User>, anyhow::Error> {
         let pool = ctx.data::<DB>().unwrap();
         let mut tx: sqlx::Transaction<'_, sqlx::Postgres> = pool.begin().await?;
@@ -100,7 +105,7 @@ impl Association {
     }
 
     pub async fn is_admin(&self, ctx: &Context<'_>, user_id: Uuid) -> Result<bool, anyhow::Error> {
-        Relations::is_admin(ctx, user_id, self.id).await
+        Relations::is_admin(ctx, &user_id, self.id).await
     }
 
     pub async fn is_treasurer(
@@ -109,6 +114,10 @@ impl Association {
         user_id: Uuid,
     ) -> Result<bool, anyhow::Error> {
         Relations::is_treasurer(ctx, user_id, self.id).await
+    }
+
+    pub async fn is_member(&self, ctx: &Context<'_>, user_id: Uuid) -> Result<bool, anyhow::Error> {
+        Relations::is_member(ctx, user_id, self.id).await
     }
 }
 
@@ -135,7 +144,7 @@ impl Association {
         .fetch_one(&mut *tx)
         .await?;
 
-        sqlx::query_as!(
+        let association_admin = sqlx::query_as!(
             AssociationAdmin,
             r#"INSERT INTO "AssociationAdmin" (user_id, association_id)
             VALUES ($1, $2)
@@ -145,6 +154,17 @@ impl Association {
         )
         .fetch_one(&mut *tx)
         .await?;
+
+        sqlx::query!(
+            r#"INSERT INTO "UserAssociation" (user_id, association_id)
+            VALUES ($1, $2)
+            RETURNING *"#,
+            user_id,
+            association.id,
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+
         tx.commit().await?;
 
         Ok(association)

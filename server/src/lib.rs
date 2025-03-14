@@ -4,7 +4,7 @@ pub mod association;
 pub mod config;
 pub mod error;
 pub mod graphql;
-// pub mod oauth;
+pub mod oauth;
 pub mod relations;
 pub mod token;
 pub mod transaction;
