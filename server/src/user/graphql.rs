@@ -7,7 +7,7 @@ use crate::{
     DB,
 };
 
-use super::model::{User, UserInput};
+use super::model::{User, UserInput, UserUpdate};
 
 #[derive(Default)]
 pub struct UserQuery;
@@ -52,7 +52,7 @@ impl UserMutation {
     }
 
     async fn create_user(&self, ctx: &Context<'_>, user_input: UserInput) -> FieldResult<User> {
-        let claims = ctx.data::<Claims>()?;
+        let _claims = ctx.data::<Claims>()?;
         // TODO: Add that email in `claims` can be set to user.
 
         let pool = ctx.data::<DB>().expect("DB pool not found");
@@ -78,5 +78,19 @@ impl UserMutation {
         } else {
             Err(anyhow::Error::msg("Unauthorized, please log in").into())
         }
+    }
+
+    async fn update(&self, ctx: &Context<'_>, user_update: UserUpdate) -> FieldResult<User> {
+        let claims = ctx.data::<Claims>()?;
+        let user_id = &claims
+            .sub
+            .ok_or(anyhow::Error::msg("Unauthorized, please log in"))?;
+
+        if user_update.id != *user_id {
+            return Err(anyhow::Error::msg("Cannot change other user").into());
+        }
+        let pool = ctx.data::<DB>().expect("DB pool not found");
+        let user = User::update(pool, user_update).await?;
+        Ok(user)
     }
 }

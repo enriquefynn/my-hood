@@ -44,6 +44,21 @@ pub struct UserInput {
     pub identities: Option<String>,
 }
 
+#[derive(InputObject)]
+pub struct UserUpdate {
+    pub id: Uuid,
+    pub name: Option<String>,
+    pub birthday: chrono::NaiveDate,
+    pub address: String,
+    pub activity: Option<String>,
+    pub personal_phone: Option<String>,
+    pub commercial_phone: Option<String>,
+    pub uses_whatsapp: bool,
+    pub identities: Option<String>,
+    pub profile_url: Option<String>,
+    pub deleted: Option<bool>,
+}
+
 #[Object]
 impl User {
     pub async fn id(&self) -> Uuid {
@@ -202,5 +217,42 @@ impl User {
         .await?;
         tx.commit().await?;
         Ok(pending)
+    }
+
+    pub async fn update(db: &DB, user: UserUpdate) -> Result<User, anyhow::Error> {
+        let mut tx: sqlx::Transaction<'_, sqlx::Postgres> = db.begin().await?;
+        let new_user = sqlx::query_as!(
+            User,
+            r#"
+            UPDATE "User" SET
+                name = COALESCE($1, name),
+                birthday = COALESCE($2, birthday),
+                address = COALESCE($3, address),
+                activity = COALESCE($4, activity),
+                personal_phone = COALESCE($5, personal_phone),
+                commercial_phone = COALESCE($6, commercial_phone),
+                uses_whatsapp = COALESCE($7, uses_whatsapp),
+                identities = COALESCE($8, identities),
+                profile_url = COALESCE($9, profile_url),
+                deleted = COALESCE($10, deleted)
+            WHERE id = $11
+            RETURNING *
+            "#,
+            user.name,
+            user.birthday,
+            user.address,
+            user.activity,
+            user.personal_phone,
+            user.commercial_phone,
+            user.uses_whatsapp,
+            user.identities,
+            user.profile_url,
+            user.deleted,
+            user.id
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(new_user)
     }
 }
