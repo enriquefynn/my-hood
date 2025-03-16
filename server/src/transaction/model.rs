@@ -78,4 +78,21 @@ impl Transaction {
             .await?;
         Ok(transactions)
     }
+
+    pub async fn toggle_deleted(db: &DB, id: &Uuid) -> Result<bool, anyhow::Error> {
+        let mut tx = db.begin().await?;
+        let deleted: bool = sqlx::query_scalar!(
+            r#"
+            UPDATE "Transaction"
+            SET deleted = not deleted
+            WHERE id = $1
+            RETURNING deleted
+            "#,
+            id
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(deleted)
+    }
 }

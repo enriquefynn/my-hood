@@ -27,6 +27,16 @@ pub struct AssociationRoles {
     pub updated_at: chrono::NaiveDateTime,
 }
 
+#[derive(Debug, SimpleObject, FromRow)]
+pub struct AssociationRolesUpdate {
+    pub user_id: Uuid,
+    pub association_id: Uuid,
+    pub role: Role,
+    pub pending: bool,
+    pub start_date: Option<chrono::NaiveDate>,
+    pub end_date: Option<chrono::NaiveDate>,
+}
+
 pub struct Relations;
 
 impl Relations {
@@ -80,5 +90,32 @@ impl Relations {
         .await?;
 
         Ok(association_roles)
+    }
+
+    pub async fn update_role(
+        ctx: &Context<'_>,
+        association_roles: AssociationRolesUpdate,
+    ) -> Result<AssociationRoles, anyhow::Error> {
+        let pool = ctx.data::<DB>().unwrap();
+        let user_association = sqlx::query_as::<_, AssociationRoles>(
+            r#"UPDATE "AssociationRoles" SET
+                role = COALESCE($3, role),
+                pending = COALESCE($4, pending),
+                start_date = COALESCE($5, start_date),
+                end_date = COALESCE($6, end_date)
+                WHERE user_id = $1 AND association_id = $2
+                RETURNING *
+            "#,
+        )
+        .bind(association_roles.user_id)
+        .bind(association_roles.association_id)
+        .bind(association_roles.role)
+        .bind(association_roles.pending)
+        .bind(association_roles.start_date)
+        .bind(association_roles.end_date)
+        .fetch_one(pool)
+        .await?;
+
+        Ok(user_association)
     }
 }

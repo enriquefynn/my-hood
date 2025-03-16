@@ -4,7 +4,7 @@ use sqlx::FromRow;
 use uuid::Uuid;
 
 use crate::{
-    relations::model::{ Relations, Role},
+    relations::model::{Relations, Role},
     transaction::model::Transaction,
     user::model::User,
     DB,
@@ -44,8 +44,8 @@ pub struct AssociationInput {
     country: String,
     state: String,
     address: String,
-    public: bool,
-    deleted: bool,
+    public: Option<bool>,
+    deleted: Option<bool>,
     identity: Option<String>,
 }
 
