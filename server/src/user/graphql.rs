@@ -1,7 +1,11 @@
 use async_graphql::{Context, FieldResult, Object};
 use uuid::Uuid;
 
-use crate::{relations::model::Relations, token::Claims, DB};
+use crate::{
+    relations::model::{Relations, Role},
+    token::Claims,
+    DB,
+};
 
 use super::model::{User, UserInput};
 
@@ -17,7 +21,7 @@ impl UserQuery {
             .sub
             .ok_or(anyhow::Error::msg("Unauthorized, please log in"))?;
 
-        if &id == user_id || claims.is_global_admin() {
+        if &id == user_id {
             let pool = ctx.data::<DB>().unwrap();
             let user = User::read_one(pool, &id).await?;
             Ok(user)
@@ -49,9 +53,7 @@ impl UserMutation {
 
     async fn create_user(&self, ctx: &Context<'_>, user_input: UserInput) -> FieldResult<User> {
         let claims = ctx.data::<Claims>()?;
-        if !claims.is_global_admin() {
-            return Err(anyhow::Error::msg("Unauthorized, please log in").into());
-        }
+        // TODO: Add that email in `claims` can be set to user.
 
         let pool = ctx.data::<DB>().expect("DB pool not found");
         let user = User::create(pool, user_input).await?;
@@ -68,8 +70,8 @@ impl UserMutation {
             .sub
             .ok_or(anyhow::Error::msg("Unauthorized, please log in"))?;
 
-        let is_association_admin = Relations::is_admin(ctx, user_id, association_id).await?;
-        if is_association_admin || claims.is_global_admin() {
+        let role = Relations::get_role(ctx, user_id, association_id, Role::Admin).await?;
+        if role.is_some() {
             let pool = ctx.data::<DB>().expect("DB pool not found");
             let toggle_user = User::toggle_approve(pool, &user_id, &association_id).await?;
             Ok(toggle_user)

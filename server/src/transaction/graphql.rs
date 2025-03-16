@@ -36,7 +36,7 @@ impl TransactionMutation {
         let pool = ctx.data::<DB>().unwrap();
         let user = User::read_one(pool, &user_id).await?;
         let is_treasuerer = user.is_treasurer(ctx, transaction.association_id).await?;
-        if !is_treasuerer || claims.is_global_admin() {
+        if !is_treasuerer {
             Err(anyhow::Error::msg("Unauthorized, please log in"))?
         }
         let user = Transaction::create(pool, transaction).await?;

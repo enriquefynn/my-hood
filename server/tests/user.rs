@@ -1,8 +1,9 @@
+mod test_utils;
+
 #[cfg(test)]
 use my_hood_server::config::Config;
-use my_hood_server::token::{Claims, Roles};
-
-use crate::{get_schema_for_tests, get_users_json, setup_db};
+use my_hood_server::token::Claims;
+use test_utils::{get_schema_for_tests, get_users_json, setup_db};
 
 #[tokio::test]
 async fn test_create_user() {
@@ -13,7 +14,6 @@ async fn test_create_user() {
         sub: Some(admin.id),
         exp: 0,
         email: admin.email,
-        roles: vec![Roles::GlobalAdmin],
     };
     let schema = get_schema_for_tests(db.clone(), config.clone(), claims);
 
@@ -61,34 +61,8 @@ async fn test_get_user() {
         sub: Some(admin.id),
         exp: 0,
         email: admin.email,
-        roles: vec![Roles::GlobalAdmin],
     };
     let schema = get_schema_for_tests(db.clone(), config.clone(), claims);
-
-    let create_user_mutation = r#"mutation {
-            createUser(userInput: {
-                name: "Test User",
-                email: "test@gmail.com",
-                birthday: "2012-11-19",
-                address: "Rua A nr 1",
-                usesWhatsapp: true
-            }) {
-                id
-            }
-        }
-        "#;
-
-    let request = async_graphql::Request::new(create_user_mutation.to_string());
-    let response = schema.execute(request).await;
-    let response = response.data.into_value();
-    let user = response.into_json().unwrap();
-    let user_id = user
-        .get("createUser")
-        .unwrap()
-        .get("id")
-        .unwrap()
-        .as_str()
-        .unwrap();
 
     let get_user_query = format!(
         r#"query {{
@@ -100,7 +74,7 @@ async fn test_get_user() {
                     usesWhatsapp,
                 }}
             }}"#,
-        user_id
+        admin.id
     );
     let request = async_graphql::Request::new(get_user_query);
     let response = schema.execute(request).await.data.into_value();
@@ -108,8 +82,8 @@ async fn test_get_user() {
     let expected_response = serde_json::from_str(
         r#"{
                 "user": {
-                    "name": "Test User",
-                    "email": "test@gmail.com",
+                    "name": "Test User 1",
+                    "email": "testuser1@test.com",
                     "birthday": "2012-11-19",
                     "address": "Rua A nr 1",
                     "usesWhatsapp": true
@@ -129,7 +103,6 @@ async fn test_create_association() {
         sub: Some(admin.id),
         exp: 0,
         email: admin.email,
-        roles: vec![Roles::GlobalAdmin],
     };
     let schema = get_schema_for_tests(db.clone(), config.clone(), claims);
 
@@ -177,7 +150,6 @@ async fn test_users_association() {
         sub: Some(admin.id),
         exp: 0,
         email: admin.email,
-        roles: vec![Roles::GlobalAdmin],
     };
     let schema = get_schema_for_tests(db.clone(), config.clone(), claims);
 

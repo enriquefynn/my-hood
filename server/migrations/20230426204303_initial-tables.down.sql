@@ -1,9 +1,6 @@
 DROP TABLE IF EXISTS "User";
-DROP TABLE IF EXISTS "GlobalAdmin";
 DROP TABLE IF EXISTS "Association";
-DROP TABLE IF EXISTS "UserAssociation";
-DROP TABLE IF EXISTS "AssociationAdmin";
-DROP TABLE IF EXISTS "AssociationTreasurer";
+DROP TABLE IF EXISTS "AssociationRoles";
 DROP TABLE IF EXISTS "Transaction";
 DROP TABLE IF EXISTS "User";
 DROP TABLE IF EXISTS "User";

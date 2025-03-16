@@ -4,7 +4,7 @@ use sqlx::FromRow;
 use uuid::Uuid;
 
 use crate::{
-    relations::model::{AssociationAdmin, Relations},
+    relations::model::{ Relations, Role},
     transaction::model::Transaction,
     user::model::User,
     DB,
@@ -20,8 +20,21 @@ pub struct Association {
     pub address: String,
     pub identity: Option<String>,
     pub public: bool,
+    pub deleted: bool,
     pub created_at: chrono::NaiveDateTime,
     pub updated_at: chrono::NaiveDateTime,
+}
+
+#[derive(InputObject)]
+pub struct AssociationUpdate {
+    pub name: Option<String>,
+    pub neighborhood: Option<String>,
+    pub country: Option<String>,
+    pub state: Option<String>,
+    pub address: Option<String>,
+    pub identity: Option<String>,
+    pub public: Option<bool>,
+    pub deleted: Option<bool>,
 }
 
 #[derive(InputObject)]
@@ -31,6 +44,8 @@ pub struct AssociationInput {
     country: String,
     state: String,
     address: String,
+    public: bool,
+    deleted: bool,
     identity: Option<String>,
 }
 
@@ -68,13 +83,13 @@ impl Association {
         self.public
     }
 
-    pub async fn users(&self, ctx: &Context<'_>) -> Result<Vec<User>, anyhow::Error> {
+    pub async fn members(&self, ctx: &Context<'_>) -> Result<Vec<User>, anyhow::Error> {
         let pool = ctx.data::<DB>().unwrap();
         let mut tx: sqlx::Transaction<'_, sqlx::Postgres> = pool.begin().await?;
         let users = sqlx::query_as!(
             User,
-            r#"SELECT a.* FROM "User" a 
-        INNER JOIN "UserAssociation" ua ON a.id = ua.user_id WHERE ua.association_id = $1"#,
+            r#"SELECT u.* FROM "User" u
+        INNER JOIN "AssociationRoles" ar ON u.id = ar.user_id WHERE ar.association_id = $1 AND ar.role = 'admin'"#,
             self.id
         )
         .fetch_all(&mut *tx)
@@ -104,20 +119,9 @@ impl Association {
         Ok(transactions)
     }
 
-    pub async fn is_admin(&self, ctx: &Context<'_>, user_id: Uuid) -> Result<bool, anyhow::Error> {
-        Relations::is_admin(ctx, &user_id, self.id).await
-    }
-
-    pub async fn is_treasurer(
-        &self,
-        ctx: &Context<'_>,
-        user_id: Uuid,
-    ) -> Result<bool, anyhow::Error> {
-        Relations::is_treasurer(ctx, user_id, self.id).await
-    }
-
     pub async fn is_member(&self, ctx: &Context<'_>, user_id: Uuid) -> Result<bool, anyhow::Error> {
-        Relations::is_member(ctx, user_id, self.id).await
+        let member = Relations::get_role(ctx, &user_id, self.id, Role::Member).await?;
+        Ok(member.is_some())
     }
 }
 
@@ -144,29 +148,25 @@ impl Association {
         .fetch_one(&mut *tx)
         .await?;
 
-        let association_admin = sqlx::query_as!(
-            AssociationAdmin,
-            r#"INSERT INTO "AssociationAdmin" (user_id, association_id)
-            VALUES ($1, $2)
-            RETURNING *"#,
+        let _association_admin = Relations::create_association_role(
+            &mut *tx,
             user_id,
             association.id,
+            Role::Admin,
+            false,
+            None,
         )
-        .fetch_one(&mut *tx)
         .await?;
-
-        sqlx::query!(
-            r#"INSERT INTO "UserAssociation" (user_id, association_id)
-            VALUES ($1, $2)
-            RETURNING *"#,
+        let _user_association = Relations::create_association_role(
+            &mut *tx,
             user_id,
             association.id,
+            Role::Member,
+            false,
+            None,
         )
-        .fetch_one(&mut *tx)
         .await?;
-
         tx.commit().await?;
-
         Ok(association)
     }
 
@@ -182,11 +182,46 @@ impl Association {
         Ok(association)
     }
 
-    pub async fn read_all(db: DB) -> Result<Vec<Association>, anyhow::Error> {
+    pub async fn read_all(db: &DB) -> Result<Vec<Association>, anyhow::Error> {
         let mut tx = db.begin().await?;
-        let users = sqlx::query_as!(Association, r#"SELECT * FROM "Association""#)
+        let associations = sqlx::query_as!(Association, r#"SELECT * FROM "Association""#)
             .fetch_all(&mut *tx)
             .await?;
-        Ok(users)
+        Ok(associations)
+    }
+
+    pub async fn update(
+        db: &DB,
+        id: &Uuid,
+        association: AssociationUpdate,
+    ) -> Result<Association, anyhow::Error> {
+        let mut tx = db.begin().await?;
+
+        let association = sqlx::query_as!(
+            Association,
+            r#"UPDATE "Association"
+                SET name = COALESCE($1, name),
+                    neighborhood = COALESCE($2, neighborhood),
+                    country = COALESCE($3, country),
+                    state = COALESCE($4, state),
+                    address = COALESCE($5, address),
+                    identity = COALESCE($6, identity),
+                    public = COALESCE($7, public),
+                    deleted = COALESCE($8, deleted)
+                WHERE id = $9 RETURNING *"#,
+            association.name,
+            association.neighborhood,
+            association.country,
+            association.state,
+            association.address,
+            association.identity,
+            association.public,
+            association.deleted,
+            id
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(association)
     }
 }

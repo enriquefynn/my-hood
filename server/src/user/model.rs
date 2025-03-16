@@ -3,7 +3,11 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
-use crate::{association::model::Association, relations::model::Relations, DB};
+use crate::{
+    association::model::Association,
+    relations::model::{Relations, Role},
+    DB,
+};
 
 #[derive(Debug, FromRow, Deserialize, Serialize)]
 pub struct User {
@@ -19,6 +23,7 @@ pub struct User {
     pub uses_whatsapp: bool,
     pub identities: Option<String>,
     pub profile_url: Option<String>,
+    pub deleted: bool,
     pub created_at: chrono::NaiveDateTime,
     pub updated_at: chrono::NaiveDateTime,
 }
@@ -86,8 +91,8 @@ impl User {
         let mut tx = pool.begin().await?;
         let associations = sqlx::query_as!(
             Association,
-            r#"SELECT a.* FROM "Association" a 
-        INNER JOIN "UserAssociation" ua ON a.id = ua.association_id WHERE ua.user_id = $1"#,
+            r#"SELECT a.* FROM "Association" a
+        INNER JOIN "AssociationRoles" ar ON a.id = ar.association_id WHERE ar.user_id = $1 AND ar.role = 'member'"#,
             self.id
         )
         .fetch_all(&mut *tx)
@@ -100,7 +105,8 @@ impl User {
         ctx: &Context<'_>,
         association_id: Uuid,
     ) -> Result<bool, anyhow::Error> {
-        Relations::is_admin(ctx, &self.id, association_id).await
+        let role = Relations::get_role(ctx, &self.id, association_id, Role::Admin).await?;
+        Ok(role.is_some())
     }
 
     pub async fn is_treasurer(
@@ -108,7 +114,8 @@ impl User {
         ctx: &Context<'_>,
         association_id: Uuid,
     ) -> Result<bool, anyhow::Error> {
-        Relations::is_treasurer(ctx, self.id, association_id).await
+        let role = Relations::get_role(ctx, &self.id, association_id, Role::Treasurer).await?;
+        Ok(role.is_some())
     }
 
     pub async fn pending(
@@ -116,7 +123,9 @@ impl User {
         ctx: &Context<'_>,
         association_id: Uuid,
     ) -> Result<bool, anyhow::Error> {
-        Relations::is_pending(ctx, self.id, association_id).await
+        let member = Relations::get_role(ctx, &self.id, association_id, Role::Member).await?;
+        let pending = member.map(|m| m.pending).unwrap_or(false);
+        Ok(pending)
     }
 }
 
@@ -181,13 +190,13 @@ impl User {
         let mut tx = db.begin().await?;
         let pending: bool = sqlx::query_scalar!(
             r#"
-                UPDATE "UserAssociation"
+                UPDATE "AssociationRoles"
                 SET pending = not pending
-                WHERE user_id = $1 AND association_id = $2
+                WHERE user_id = $1 AND association_id = $2 AND role = 'member'
                 RETURNING pending
                 "#,
             user_id,
-            association_id
+            association_id,
         )
         .fetch_one(&mut *tx)
         .await?;

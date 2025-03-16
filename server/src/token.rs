@@ -17,7 +17,8 @@ use crate::DB;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub enum Roles {
-    GlobalAdmin,
+    Treasurer,
+    Admin,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -25,13 +26,6 @@ pub struct Claims {
     pub sub: Option<uuid::Uuid>,
     pub email: Option<String>,
     pub exp: usize,
-    pub roles: Vec<Roles>,
-}
-
-impl Claims {
-    pub fn is_global_admin(&self) -> bool {
-        self.roles.contains(&Roles::GlobalAdmin)
-    }
 }
 
 // A small extractor that pulls Claims from Request.extensions()
@@ -151,27 +145,16 @@ pub async fn login_handler(
             }
 
             //Check if the user is a global admin
-            let global_admin =
-                sqlx::query!(r#"SELECT * FROM "GlobalAdmin" WHERE user_id = $1"#, user.id)
-                    .fetch_optional(&mut *tx)
-                    .await
-                    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error"))?;
-            let mut roles = vec![];
-            if global_admin.is_some() {
-                roles.push(Roles::GlobalAdmin);
-            }
             Claims {
                 sub,
                 email: user.email,
                 exp,
-                roles,
             }
         }
         None => Claims {
             sub: None,
             email: None,
             exp,
-            roles: vec![],
         },
     };
 

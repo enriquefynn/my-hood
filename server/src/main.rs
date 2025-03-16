@@ -9,9 +9,11 @@ use axum::{
 use clap::{command, Args, Parser, Subcommand};
 use dotenv::dotenv;
 use my_hood_server::{
+    association::model::Association,
     config::Config,
     graphql::{get_schema, graphql_handler},
     oauth::{callback_handler, google_oauth_client},
+    relations::model::{Relations, Role},
     token::login_handler,
     user::model::User,
     DB,
@@ -29,16 +31,23 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    /// Run the application
+    /// Run the application.
     Run,
-    /// Create a super user
-    CreateSuperUser(CreateSuperUserArgs),
+    /// Create a user.
+    CreateUser(CreateUserArgs),
+    /// Grant admin and treasurer permission to user in all associations.
+    GrantAllPermissions(GrantAllPermissionsArgs),
 }
 
 #[derive(Args, Debug)]
-struct CreateSuperUserArgs {
+struct CreateUserArgs {
     email: String,
     password: String,
+}
+
+#[derive(Args, Debug)]
+struct GrantAllPermissionsArgs {
+    user_id: uuid::Uuid,
 }
 
 async fn run() -> anyhow::Result<()> {
@@ -73,7 +82,7 @@ async fn run() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn create_super_user(email: String, password: String) -> anyhow::Result<User> {
+async fn create_user(email: String, password: String) -> anyhow::Result<User> {
     let password_hash = bcrypt::hash(password, 12)?;
     let db_url = env::var("DATABASE_URL").unwrap();
     let db = DB::connect(&db_url).await.unwrap();
@@ -92,15 +101,40 @@ async fn create_super_user(email: String, password: String) -> anyhow::Result<Us
     .fetch_one(&mut *tx)
     .await?;
 
-    sqlx::query!(
-        r#"INSERT INTO "GlobalAdmin" (user_id) VALUES ($1) RETURNING *"#,
-        user.id
-    )
-    .fetch_one(&mut *tx)
-    .await?;
-
     tx.commit().await?;
     Ok(user)
+}
+
+// Grant admin and treasurer permission to user in all associations
+async fn grant_permissions(user_id: uuid::Uuid) -> anyhow::Result<()> {
+    let db_url = env::var("DATABASE_URL").unwrap();
+    let db = DB::connect(&db_url).await?;
+    let associations = Association::read_all(&db).await?;
+
+    let mut tx = db.begin().await?;
+
+    for association in associations {
+        Relations::create_association_role(
+            &mut *tx,
+            user_id,
+            association.id,
+            Role::Admin,
+            false,
+            None,
+        )
+        .await?;
+        Relations::create_association_role(
+            &mut *tx,
+            user_id,
+            association.id,
+            Role::Member,
+            false,
+            None,
+        )
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(())
 }
 
 #[tokio::main]
@@ -111,10 +145,13 @@ async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Commands::Run => run().await,
-        // Commands::CreateSuperUser => create_super_user().await?,
-        Commands::CreateSuperUser(args) => {
-            let user = create_super_user(args.email, args.password).await?;
-            println!("Super user created: {:?}", user);
+        Commands::CreateUser(args) => {
+            let user = create_user(args.email, args.password).await?;
+            println!("User created: {:?}", user);
+            Ok(())
+        }
+        Commands::GrantAllPermissions(args) => {
+            grant_permissions(args.user_id).await?;
             Ok(())
         }
     }

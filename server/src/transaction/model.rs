@@ -40,11 +40,10 @@ impl Transaction {
             r#"
             WITH valid_treasurer AS (
                 SELECT 1
-                FROM "AssociationTreasurer"
-                WHERE association_id = $1 AND user_id = $2
+                FROM "AssociationRoles"
+                WHERE association_id = $1 AND user_id = $2 AND role = 'treasurer'
             )
-            INSERT INTO "Transaction" (association_id, creator_id, details, amount,
-                reference_date)
+            INSERT INTO "Transaction" (association_id, creator_id, details, amount, reference_date)
                 SELECT $1, $2, $3, $4, $5
                 FROM valid_treasurer
                 RETURNING *"#,
@@ -57,7 +56,6 @@ impl Transaction {
         .fetch_one(&mut *tx)
         .await?;
         tx.commit().await?;
-
         Ok(transaction)
     }
 

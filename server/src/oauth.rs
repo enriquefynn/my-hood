@@ -107,7 +107,6 @@ pub async fn callback_handler(
                         sub: None,
                         exp,
                         email,
-                        roles: vec![],
                     };
                     Ok(Json(serde_json::to_string(&claims).map_err(|err| {
                         eprintln!("Error serializing claims: {}", err);
