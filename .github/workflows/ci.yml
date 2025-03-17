@@ -25,6 +25,10 @@ jobs:
               working-directory: ./server
               run: docker-compose up -d
 
+            - name: Install SQLx CLI
+              run: |
+                  cargo install --version=0.8.3 sqlx-cli --no-default-features --features postgres
+
             - name: Populate DB and Create Pool
               working-directory: ./server
               run: |
