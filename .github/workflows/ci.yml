@@ -11,8 +11,6 @@ on:
 jobs:
     build:
         runs-on: ubuntu-latest
-        env:
-            DATABASE_URL: postgres://postgres:postgres@localhost:5442/hood-test
 
         steps:
             - name: Checkout code
@@ -30,6 +28,16 @@ jobs:
             - name: Install SQLx CLI
               run: |
                   cargo install --version=0.8.3 sqlx-cli --no-default-features --features postgres
+
+            - name: Create .env file
+              working-directory: ./server
+              run: |
+                  echo "HOST=127.0.0.1" >> .env
+                  echo "PORT=8000" >> .env
+                  echo "RUST_LOG=info,actix=debug" >> .env
+                  echo "DATABASE_URL="postgres://postgres:postgres@localhost:5442/hood-test"" >> .env
+                  echo "SECRET="my_secret_key" >> .env
+                  cat .env
 
             - name: Populate DB and Create Pool
               working-directory: ./server
