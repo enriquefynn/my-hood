@@ -19,7 +19,7 @@ jobs:
             - name: Install Docker Compose Plugin
               run: |
                   sudo apt-get update
-                  sudo apt-get install -y docker-compose-plugin
+                  sudo apt-get install -y docker-compose
 
             - name: Start PostgreSQL via Docker Compose
               working-directory: ./server
