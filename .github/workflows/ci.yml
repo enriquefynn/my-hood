@@ -17,9 +17,11 @@ jobs:
               uses: actions/checkout@v3
 
             - name: Set up Rust
-              uses: actions/setup-rust@v1
+              uses: actions-rs/toolchain@v1
               with:
-                  rust-version: stable
+                  profile: minimal
+                  toolchain: stable
+                  override: true
 
             - name: Build project
               working-directory: ./server
