@@ -39,6 +39,9 @@ jobs:
                   echo "RUST_LOG=info,actix=debug" >> .env
                   echo "DATABASE_URL=postgres://postgres:postgres@localhost:5442/hood-test" >> .env
                   echo "SECRET=my_secret_key" >> .env
+                  echo "JWT_SECRET=my_ultra_secure_secret" >> .env
+                  echo "TOKEN_EXPIRED_IN=60m" >> .env
+                  echo "TOKEN_MAXAGE=60" >> .env
                   cat .env
 
             - name: Populate DB and Create Pool
