@@ -36,7 +36,7 @@ jobs:
               run: |
                   echo "HOST=127.0.0.1" >> .env
                   echo "PORT=8000" >> .env
-                  echo "RUST_LOG=info,actix=debug" >> .env
+                  echo "RUST_LOG=info,debug" >> .env
                   echo "DATABASE_URL=postgres://postgres:postgres@localhost:5442/hood-test" >> .env
                   echo "SECRET=my_secret_key" >> .env
                   echo "JWT_SECRET=my_ultra_secure_secret" >> .env
