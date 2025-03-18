@@ -42,6 +42,9 @@ jobs:
                   echo "JWT_SECRET=my_ultra_secure_secret" >> .env
                   echo "TOKEN_EXPIRED_IN=60m" >> .env
                   echo "TOKEN_MAXAGE=60" >> .env
+                  echo "GOOGLE_OAUTH_CLIENT_ID=mygoogleoauthclientid" >> .env
+                  echo "GOOGLE_OAUTH_CLIENT_SECRET=mygoogleoauthclientsecret" >> .env
+                  echo "GOOGLE_OAUTH_REDIRECT_URL=http://localhost:8000/oauth/google/callback" >> .env
                   cat .env
 
             - name: Populate DB and Create Pool
