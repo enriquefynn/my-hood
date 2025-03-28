@@ -144,7 +144,6 @@ pub async fn login_handler(
                 }
             }
 
-            //Check if the user is a global admin
             Claims {
                 sub,
                 email: user.email,
