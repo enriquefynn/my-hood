@@ -36,9 +36,9 @@ pub async fn graphql_handler(
     claims: Claims,
     req: GraphQLRequest,
 ) -> impl IntoResponse {
-    // // Turn the incoming request into an async-graphql `Request`
+    // Turn the incoming request into an async-graphql `Request`
     let mut request = req.into_inner();
-    // // Insert claims so that resolvers can access them via Context
+    // Insert claims so that resolvers can access them via Context
     request = request.data(claims);
 
     let response = schema.execute(request).await;

@@ -6,7 +6,12 @@
 
 - Install Rust, follow the steps at <https://rustup.rs/>
 
-- Install Postgres
+- Install Postgres or run docker with:
+
+```bash
+docker compose up
+```
+
 - Migrate database with
 
     ```bash

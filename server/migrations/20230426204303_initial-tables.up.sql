@@ -49,13 +49,14 @@ CREATE TABLE IF NOT EXISTS "AssociationRoles" (
 );
 
 -- Financial data
--- If `amount < 0` it"s an expense, otherwise it"s an income.
+-- If `amount < 0` it's an expense, otherwise it's an income.
 CREATE TABLE IF NOT EXISTS "Transaction" (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     association_id UUID NOT NULL REFERENCES "Association"(id),
     creator_id UUID NOT NULL REFERENCES "User"(id),
     details VARCHAR(1024) NOT NULL,
     amount DECIMAL(9, 2) NOT NULL,
+    proof_url VARCHAR(250),
     -- Date for which this expense/income is related.
     reference_date DATE NOT NULL,
     deleted BOOLEAN NOT NULL DEFAULT FALSE,
@@ -77,6 +78,10 @@ EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER trigger_name_before_update
 BEFORE UPDATE ON "Association"
+EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER trigger_name_before_update
+BEFORE UPDATE ON "AssociationRoles"
 EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER trigger_name_before_update
