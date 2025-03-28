@@ -76,7 +76,7 @@ pub fn extract_claims_from_header(header_map: &HeaderMap) -> Option<Claims> {
 
 // Function to validate JWT token
 fn validate_token(token: &str) -> Result<Claims, Error> {
-    let secret = env::var("SECRET").expect("SECRET must be set");
+    let secret = env::var("JWT_SECRET").expect("JWT_SECRET must be set");
     let token: TokenData<Claims> = decode(
         token,
         &DecodingKey::from_secret(secret.as_bytes()),
@@ -109,7 +109,7 @@ pub async fn login_handler(
     Extension(db): Extension<DB>,
     Json(payload): Json<LoginOrCreateRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, &'static str)> {
-    let secret = env::var("SECRET").expect("SECRET must be set");
+    let secret = env::var("JWT_SECRET").expect("JWT_SECRET must be set");
 
     let mut tx = db
         .begin()

@@ -13,3 +13,7 @@
 ## Examples of queries
 
 TODO
+
+## Tests
+
+cargo test -- --test-threads=1
