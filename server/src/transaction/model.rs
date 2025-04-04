@@ -13,6 +13,7 @@ pub struct Transaction {
     pub creator_id: Uuid,
     pub details: String,
     pub amount: BigDecimal,
+    pub proof_url: Option<String>,
     pub reference_date: chrono::NaiveDate,
     pub deleted: bool,
     pub created_at: chrono::NaiveDateTime,
