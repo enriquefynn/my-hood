@@ -1,81 +1,158 @@
 use std::env;
 
-use actix_web::{
-    guard,
-    web::{self, Data},
-    App, HttpResponse, HttpServer, Responder,
+use async_graphql::http::GraphiQLSource;
+use axum::{
+    response::{self, IntoResponse},
+    routing::{get, post},
+    Extension, Router,
 };
-use async_graphql::{
-    http::{playground_source, GraphQLPlaygroundConfig},
-    EmptySubscription, Schema,
-};
-use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse};
+use clap::{command, Args, Parser, Subcommand};
 use dotenv::dotenv;
 use my_hood_server::{
+    association::model::Association,
     config::Config,
-    graphql::{get_schema, Mutation, Query},
-    oauth::google_oauth_handler,
+    graphql::{get_schema, graphql_handler},
+    oauth::{callback_handler, google_oauth_client},
+    relations::model::{Relations, Role},
+    token::login_handler,
+    user::model::User,
+    DB,
 };
-use sqlx::PgPool;
+use tokio::net::TcpListener;
 
 mod utils;
 
-async fn oauth_redirect() -> impl Responder {
-    let google_auth_url = format!(
-        "https://accounts.google.com/o/oauth2/v2/auth?client_id={}&redirect_uri={}&response_type=code&scope=email%20profile",
-        env::var("CLIENT_ID").unwrap(),
-        "http://localhost:8000/oauth/callback"
-    );
-    HttpResponse::Found()
-        .append_header(("location", google_auth_url.as_str()))
-        .finish()
+#[derive(Parser, Debug)]
+#[command(name = "MyHood", version = "1.0", about = "An example CLI app", long_about = None)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
 }
 
-#[actix_web::main]
-async fn main() -> anyhow::Result<()> {
-    dotenv().ok();
-    env_logger::init();
+#[derive(Subcommand, Debug)]
+enum Commands {
+    /// Run the application.
+    Run,
+    /// Create a user.
+    CreateUser(CreateUserArgs),
+    /// Grant admin and treasurer permission to user in all associations.
+    GrantAllPermissions(GrantAllPermissionsArgs),
+}
 
+#[derive(Args, Debug)]
+struct CreateUserArgs {
+    email: String,
+    password: String,
+}
+
+#[derive(Args, Debug)]
+struct GrantAllPermissionsArgs {
+    user_id: uuid::Uuid,
+}
+
+async fn run() -> anyhow::Result<()> {
     let db_url = env::var("DATABASE_URL").unwrap();
-    let db = PgPool::connect(&db_url).await.unwrap();
+    let db = DB::connect(&db_url).await.unwrap();
 
     let host = env::var("HOST").unwrap();
     let port = env::var("PORT").unwrap();
 
     let config = Config::new();
 
-    // Graphql entry.
-    async fn index(
-        schema: Data<Schema<Query, Mutation, EmptySubscription>>,
-        req: GraphQLRequest,
-    ) -> GraphQLResponse {
-        schema.execute(req.into_inner()).await.into()
-    }
-
     let schema = get_schema(db.clone(), config.clone());
 
-    async fn graphql_playground() -> HttpResponse {
-        HttpResponse::Ok()
-            .content_type("text/html; charset=utf-8")
-            .body(playground_source(GraphQLPlaygroundConfig::new("/")))
+    async fn graphql_playground() -> impl IntoResponse {
+        response::Html(GraphiQLSource::build().endpoint("/").finish())
     }
 
-    HttpServer::new(move || {
-        App::new()
-            .app_data(Data::new(schema.clone()))
-            .app_data(Data::new(db.clone()))
-            .app_data(Data::new(config.clone()))
-            .service(web::resource("/").guard(guard::Post()).to(index))
-            .service(google_oauth_handler)
-            .service(
-                web::resource("/")
-                    .guard(guard::Get())
-                    .to(graphql_playground),
-            )
-    })
-    .bind(format!("{host}:{port}"))?
-    .run()
+    let app = Router::new()
+        .route("/", get(graphql_playground).post(post(graphql_handler)))
+        .route("/auth", post(login_handler))
+        .route("/oauth/google/login", get(google_oauth_client))
+        .route("/oauth/google/callback", get(callback_handler))
+        .layer(Extension(schema))
+        .layer(Extension(db));
+    println!("Serving on http://{host}:{port}");
+    axum::serve(
+        TcpListener::bind(format!("{host}:{port}")).await.unwrap(),
+        app,
+    )
+    .await
+    .expect("Error spawning server");
+    Ok(())
+}
+
+async fn create_user(email: String, password: String) -> anyhow::Result<User> {
+    let password_hash = bcrypt::hash(password, 12)?;
+    let db_url = env::var("DATABASE_URL").unwrap();
+    let db = DB::connect(&db_url).await.unwrap();
+    let mut tx = db.begin().await?;
+    let user = sqlx::query_as!(
+        User,
+        r#"INSERT INTO "User" (password_hash, name, birthday, address, email)
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING *"#,
+        password_hash,
+        "SuperUser",
+        "2021-01-01".parse::<chrono::NaiveDate>()?,
+        "SuperUser's address",
+        email,
+    )
+    .fetch_one(&mut *tx)
     .await?;
 
+    tx.commit().await?;
+    Ok(user)
+}
+
+// Grant admin and treasurer permission to user in all associations
+async fn grant_permissions(user_id: uuid::Uuid) -> anyhow::Result<()> {
+    let db_url = env::var("DATABASE_URL").unwrap();
+    let db = DB::connect(&db_url).await?;
+    let associations = Association::read_all(&db).await?;
+
+    let mut tx = db.begin().await?;
+
+    for association in associations {
+        Relations::create_association_role(
+            &mut *tx,
+            user_id,
+            association.id,
+            Role::Admin,
+            false,
+            None,
+        )
+        .await?;
+        Relations::create_association_role(
+            &mut *tx,
+            user_id,
+            association.id,
+            Role::Member,
+            false,
+            None,
+        )
+        .await?;
+    }
+    tx.commit().await?;
     Ok(())
+}
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    dotenv()?;
+    env_logger::init();
+
+    let cli = Cli::parse();
+    match cli.command {
+        Commands::Run => run().await,
+        Commands::CreateUser(args) => {
+            let user = create_user(args.email, args.password).await?;
+            println!("User created: {:?}", user);
+            Ok(())
+        }
+        Commands::GrantAllPermissions(args) => {
+            grant_permissions(args.user_id).await?;
+            Ok(())
+        }
+    }
 }

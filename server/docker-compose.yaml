@@ -1,0 +1,16 @@
+services:
+    postgresql:
+        image: postgres:15-alpine
+        healthcheck:
+            test:
+                ["CMD", "pg_isready", "-q", "-d", "postgres", "-U", "postgres"]
+            timeout: 45s
+            interval: 10s
+            retries: 10
+        restart: always
+        environment:
+            - POSTGRES_PASSWORD=postgres
+        volumes:
+            - ./postgres:/var/lib/postgresql/data
+        ports:
+            - 5442:5432

@@ -13,6 +13,7 @@ pub struct Transaction {
     pub creator_id: Uuid,
     pub details: String,
     pub amount: BigDecimal,
+    pub proof_url: Option<String>,
     pub reference_date: chrono::NaiveDate,
     pub deleted: bool,
     pub created_at: chrono::NaiveDateTime,
@@ -21,7 +22,7 @@ pub struct Transaction {
 
 #[derive(InputObject)]
 pub struct TransactionInput {
-    association_id: Uuid,
+    pub association_id: Uuid,
     creator_id: Uuid,
     details: String,
     amount: sqlx::types::BigDecimal,
@@ -31,53 +32,68 @@ pub struct TransactionInput {
 impl Transaction {
     pub async fn create(
         db: &DB,
-        transaction: TransactionInput,
+        transaction_input: TransactionInput,
     ) -> Result<Transaction, anyhow::Error> {
         let mut tx = db.begin().await?;
 
-        let user = sqlx::query_as!(
+        let transaction = sqlx::query_as!(
             Transaction,
             r#"
             WITH valid_treasurer AS (
                 SELECT 1
-                FROM AssociationTreasurer
-                WHERE association_id = $1 AND user_id = $2
+                FROM "AssociationRoles"
+                WHERE association_id = $1 AND user_id = $2 AND role = 'treasurer'
             )
-            INSERT INTO Transaction (association_id, creator_id, details, amount,
-                reference_date)
+            INSERT INTO "Transaction" (association_id, creator_id, details, amount, reference_date)
                 SELECT $1, $2, $3, $4, $5
                 FROM valid_treasurer
                 RETURNING *"#,
-            transaction.association_id,
-            transaction.creator_id,
-            transaction.details,
-            transaction.amount,
-            transaction.reference_date,
+            transaction_input.association_id,
+            transaction_input.creator_id,
+            transaction_input.details,
+            transaction_input.amount,
+            transaction_input.reference_date,
         )
-        .fetch_one(&mut tx)
+        .fetch_one(&mut *tx)
         .await?;
         tx.commit().await?;
-
-        Ok(user)
+        Ok(transaction)
     }
 
     pub async fn read_one(db: &DB, id: &Uuid) -> Result<Transaction, anyhow::Error> {
         let mut tx = db.begin().await?;
-        let user = sqlx::query_as!(
+        let transaction = sqlx::query_as!(
             Transaction,
-            r#"SELECT * FROM Transaction WHERE id = $1"#,
+            r#"SELECT * FROM "Transaction" WHERE id = $1"#,
             id
         )
-        .fetch_one(&mut tx)
+        .fetch_one(&mut *tx)
         .await?;
-        Ok(user)
+        Ok(transaction)
     }
 
     pub async fn read_all(db: DB) -> Result<Vec<Transaction>, anyhow::Error> {
         let mut tx = db.begin().await?;
-        let users = sqlx::query_as!(Transaction, r#"SELECT * FROM Transaction"#)
-            .fetch_all(&mut tx)
+        let transactions = sqlx::query_as!(Transaction, r#"SELECT * FROM "Transaction""#)
+            .fetch_all(&mut *tx)
             .await?;
-        Ok(users)
+        Ok(transactions)
+    }
+
+    pub async fn toggle_deleted(db: &DB, id: &Uuid) -> Result<bool, anyhow::Error> {
+        let mut tx = db.begin().await?;
+        let deleted: bool = sqlx::query_scalar!(
+            r#"
+            UPDATE "Transaction"
+            SET deleted = not deleted
+            WHERE id = $1
+            RETURNING deleted
+            "#,
+            id
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(deleted)
     }
 }
