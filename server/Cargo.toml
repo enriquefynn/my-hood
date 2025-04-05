@@ -26,6 +26,8 @@ bigdecimal = { version = "0.4.7", features = ["serde"] }
 reqwest = { version = "0.12.12", features = ["json"] }
 jsonwebtoken = "9.3.1"
 oauth2 = { version = "5.0.0", features = ["reqwest"] }
+tower-http = { version = "0.6.2", features = ["cors"] }
+http = "1.3.1"
 
 [dev-dependencies]
 tower = { version = "0.5.2", features = ["util"] }
