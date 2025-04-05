@@ -19,6 +19,8 @@ use my_hood_server::{
     DB,
 };
 use tokio::net::TcpListener;
+use tower_http::cors::{CorsLayer, Any};
+use http::{Method, HeaderValue};
 
 mod utils;
 
@@ -65,13 +67,23 @@ async fn run() -> anyhow::Result<()> {
         response::Html(GraphiQLSource::build().endpoint("/").finish())
     }
 
+    let allowed_origins = get_allowed_origins();
+
+    // CORS middleware
+    let cors = CorsLayer::new()
+        .allow_origin(allowed_origins)
+        .allow_methods(vec![Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::OPTIONS])
+        .allow_headers(Any);
+
     let app = Router::new()
         .route("/", get(graphql_playground).post(post(graphql_handler)))
         .route("/auth", post(login_handler))
         .route("/oauth/google/login", get(google_oauth_client))
         .route("/oauth/google/callback", get(callback_handler))
         .layer(Extension(schema))
-        .layer(Extension(db));
+        .layer(Extension(db))
+        .layer(cors);
+
     println!("Serving on http://{host}:{port}");
     axum::serve(
         TcpListener::bind(format!("{host}:{port}")).await.unwrap(),
@@ -80,6 +92,17 @@ async fn run() -> anyhow::Result<()> {
     .await
     .expect("Error spawning server");
     Ok(())
+}
+
+fn get_allowed_origins() -> Vec<HeaderValue> {
+    let origins = env::var("ALLOWED_ORIGINS").unwrap();
+    
+    // split string by comma, trim spaces and try to convert each item to HeaderValue
+    origins
+        .split(',')
+        .map(|origin| origin.trim())
+        .filter_map(|origin| HeaderValue::from_str(origin).ok())
+        .collect()
 }
 
 async fn create_user(email: String, password: String) -> anyhow::Result<User> {
