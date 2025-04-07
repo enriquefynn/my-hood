@@ -3,6 +3,7 @@ use sqlx::{Pool, Postgres};
 pub mod association;
 pub mod config;
 pub mod error;
+pub mod field;
 pub mod graphql;
 pub mod oauth;
 pub mod relations;

@@ -103,14 +103,13 @@ impl User {
 
     pub async fn associations(&self, ctx: &Context<'_>) -> Result<Vec<Association>, anyhow::Error> {
         let pool = ctx.data::<DB>().unwrap();
-        let mut tx = pool.begin().await?;
         let associations = sqlx::query_as!(
             Association,
             r#"SELECT a.* FROM "Association" a
         INNER JOIN "AssociationRoles" ar ON a.id = ar.association_id WHERE ar.user_id = $1 AND ar.role = 'member'"#,
             self.id
         )
-        .fetch_all(&mut *tx)
+        .fetch_all(&*pool)
         .await?;
         Ok(associations)
     }

@@ -64,6 +64,46 @@ CREATE TABLE IF NOT EXISTS "Transaction" (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS "Charge" (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    association_id UUID NOT NULL REFERENCES "Association"(id),
+    creator_id UUID NOT NULL REFERENCES "User"(id),
+    details VARCHAR(1024),
+    amount DECIMAL(9, 2) NOT NULL,
+    file_url VARCHAR(250),
+    -- Date for which this expense/income is related.
+    reference_date DATE NOT NULL,
+    deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS "Field" (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    association_id UUID NOT NULL REFERENCES "Association"(id),
+    name VARCHAR(250) NOT NULL,
+    description VARCHAR(1024),
+    reservation_rules VARCHAR(1024),
+    -- Latitude and longitude of the field.
+    latitude DECIMAL(9, 6) NOT NULL,
+    longitude DECIMAL(9, 6) NOT NULL,
+    deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS "FieldReservation" (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    field_id UUID NOT NULL REFERENCES "Field"(id),
+    user_id UUID NOT NULL REFERENCES "User"(id),
+    description VARCHAR(1024),
+    start_date TIMESTAMP WITH TIME ZONE NOT NULL,
+    end_date TIMESTAMP WITH TIME ZONE NOT NULL,
+    deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -86,6 +126,18 @@ EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER trigger_name_before_update
 BEFORE UPDATE ON "Transaction"
+EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER trigger_name_before_update
+BEFORE UPDATE ON "Charge"
+EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER trigger_name_before_update
+BEFORE UPDATE ON "Field"
+EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER trigger_name_before_update
+BEFORE UPDATE ON "FieldReservation"
 EXECUTE FUNCTION update_updated_at_column();
 
 -- TODO: Suggestions, Votes.

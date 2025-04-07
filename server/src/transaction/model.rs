@@ -97,3 +97,54 @@ impl Transaction {
         Ok(deleted)
     }
 }
+
+#[derive(SimpleObject, FromRow, Deserialize, Serialize)]
+pub struct Charge {
+    pub id: Uuid,
+    pub association_id: Uuid,
+    pub creator_id: Uuid,
+    pub details: String,
+    pub amount: BigDecimal,
+    pub file_url: Option<String>,
+    pub reference_date: chrono::NaiveDate,
+    pub deleted: bool,
+    pub created_at: chrono::NaiveDateTime,
+    pub updated_at: chrono::NaiveDateTime,
+}
+
+#[derive(InputObject)]
+pub struct ChargeInput {
+    pub association_id: Uuid,
+    creator_id: Uuid,
+    details: Option<String>,
+    amount: sqlx::types::BigDecimal,
+    file_url: Option<String>,
+    reference_date: chrono::NaiveDate,
+}
+
+impl Charge {
+    // pub async fn create(db: &DB, charge_input: ChargeInput) -> Result<Charge, anyhow::Error> {
+    //     let mut tx = db.begin().await?;
+
+    //     let charge = sqlx::query_as!(
+    //         Transaction,
+    //         r#"
+    //         WITH valid_treasurer AS (
+    //             SELECT 1
+    //             FROM "AssociationRoles"
+    //             WHERE association_id = $1 AND user_id = $2 AND role = 'treasurer'
+    //         )
+    //         INSERT INTO "Charge" (association_id, creator_id, details, amount, reference_date)
+    //             RETURNING *"#,
+    //         charge_input.association_id,
+    //         charge_input.creator_id,
+    //         charge_input.details,
+    //         charge_input.amount,
+    //         charge_input.reference_date,
+    //     )
+    //     .fetch_one(&mut *tx)
+    //     .await?;
+    //     tx.commit().await?;
+    //     Ok(transaction)
+    // }
+}

@@ -4,6 +4,7 @@ use sqlx::FromRow;
 use uuid::Uuid;
 
 use crate::{
+    field::model::Field,
     relations::model::{Relations, Role},
     transaction::model::Transaction,
     user::model::User,
@@ -122,6 +123,18 @@ impl Association {
     pub async fn is_member(&self, ctx: &Context<'_>, user_id: Uuid) -> Result<bool, anyhow::Error> {
         let member = Relations::get_role(ctx, &user_id, self.id, Role::Member).await?;
         Ok(member.is_some())
+    }
+
+    pub async fn fields(&self, ctx: &Context<'_>) -> Result<Vec<Field>, anyhow::Error> {
+        let pool = ctx.data::<DB>().unwrap();
+        let fields = sqlx::query_as!(
+            Field,
+            r#"SELECT * FROM "Field" WHERE association_id = $1"#,
+            self.id
+        )
+        .fetch_all(&*pool)
+        .await?;
+        Ok(fields)
     }
 }
 
