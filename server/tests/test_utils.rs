@@ -8,11 +8,12 @@ use axum::{
 use chrono::NaiveDate;
 use dotenv::dotenv;
 use futures::future::join_all;
+use jsonwebtoken::{encode, EncodingKey, Header};
 use my_hood_server::{
     config::Config,
     graphql::{Mutation, Query},
     token::Claims,
-    user::model::User,
+    user::model::{User, UserInput},
     DB,
 };
 use reqwest::Url;
@@ -27,7 +28,56 @@ pub struct TestDatabase {
 }
 
 impl TestDatabase {
-    /// Asynchronously creates a new test database and returns a guard containing the pool.
+    async fn get_claim_for_user(user_id: Uuid, email: String) -> String {
+        let secret = env::var("JWT_SECRET").expect("JWT_SECRET must be set");
+
+        let claims = Claims {
+            sub: Some(user_id),
+            exp: 0,
+            email: Some(email),
+        };
+        let token = encode(
+            &Header::default(),
+            &claims,
+            &EncodingKey::from_secret(secret.as_bytes()),
+        )
+        .expect("Failed to encode token");
+        token
+    }
+
+    pub async fn create_logins(&self, num_users: u32) -> Vec<User> {
+        let users = (0..num_users)
+            .map(async |i| {
+                let name = format!("Test User {}", i);
+                let birthday: NaiveDate = "2012-11-19".parse().unwrap();
+                let address = "Rua A nr 1".to_string();
+                let email = format!("testuser{}@test.com", i);
+                let password = "password".to_string();
+                let password_hash = bcrypt::hash(password, 12).unwrap();
+
+                User::create(
+                    &self.pool,
+                    UserInput {
+                        name: Some(name.clone()),
+                        birthday: birthday.clone(),
+                        address: address.clone(),
+                        email: Some(email.clone()),
+                        password_hash: Some(password_hash),
+                        uses_whatsapp: true,
+                        identities: None,
+                        personal_phone: None,
+                        commercial_phone: None,
+                        activity: None,
+                        profile_url: None,
+                    },
+                ) //name, birthday, address, email, password)
+                .await
+                .unwrap()
+            })
+            .collect::<Vec<_>>();
+        join_all(users).await
+    }
+
     pub async fn new() -> Self {
         dotenv().unwrap();
         let db_url = env::var("DATABASE_URL").unwrap();
@@ -147,7 +197,7 @@ impl TestDatabase {
             }}
             }}"#,
         );
-        let request = async_graphql::Request::new(create_association_mutation.to_string());
+        let request = async_graphql::Request::new(create_association_mutation);
         let response = schema
             .execute(request)
             .await
@@ -159,7 +209,21 @@ impl TestDatabase {
             .expect("Should get id from association");
         let association_id = Uuid::parse_str(association_id).expect("Should parse id to Uuid");
 
-        let user_memberships = create_user_membership(user_ids, association_id);
+        let user_memberships_request = create_user_membership(user_ids, association_id);
+
+        for user_memberships_request in user_memberships_request {
+            let request = async_graphql::Request::new(user_memberships_request);
+            let response = schema
+                .execute(request)
+                .await
+                .data
+                .into_json()
+                .expect("Something went wrong parsing the response");
+            let user_id = response["createUserAssociation"]["id"]
+                .as_str()
+                .expect("Should get id from user");
+            let user_id = Uuid::parse_str(user_id).expect("Should parse id to Uuid");
+        }
     }
 }
 
@@ -214,32 +278,37 @@ pub fn create_users_json(n_users: u32) -> Vec<String> {
         .map(|id| {
             format!(
                 r#"mutation {{
-            createUser(userInput: {{
-                name: "Test User {}",
-                email: "test{}@gmail.com",
-                birthday: "2012-11-19",
-                address: "Rua A nr 1",
-                usesWhatsapp: true
-            }})
-        {{
-        id
-        }}
-        }}"#,
+                    createUser(userInput: {{
+                        name: "Test User {}",
+                        email: "test{}@gmail.com",
+                        birthday: "2012-11-19",
+                        address: "Rua A nr 1",
+                        usesWhatsapp: true
+                    }})
+                    {{
+                        id
+                    }}
+                }}
+                "#,
                 id, id
             )
         })
         .collect::<Vec<String>>()
 }
 
-pub fn create_user_membership(user_ids: Vec<Uuid>, association_id: Uuid) -> Vec<serde_json::Value> {
+pub fn create_user_membership(user_ids: Vec<Uuid>, association_id: Uuid) -> Vec<String> {
     user_ids
         .into_iter()
         .map(|user_id| {
-            serde_json::json!({
-                "query": format!("mutation {{
-                createUserAssociation(userId: \"{}\", associationId: \"{}\")
-            }}", user_id, association_id)
-            })
+            format!(
+                r#"mutation {{
+                    associate(associationId: {})
+                    {{
+                        userId
+                    }}
+                }}"#,
+                association_id
+            )
         })
         .collect()
 }

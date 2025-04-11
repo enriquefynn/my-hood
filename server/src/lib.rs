@@ -1,4 +1,5 @@
 use sqlx::{Pool, Postgres};
+use user::model::User;
 
 pub mod association;
 pub mod config;

@@ -14,8 +14,9 @@ async fn test_create_reservation() {
         exp: 0,
         email: test_db.admin.email.clone(),
     };
-    let schemao = test_db.get_schema_for_tests(config.clone(), claims);
+    let schema = test_db.get_schema_for_tests(config.clone(), claims);
 
+    test_db.create_logins(10).await;
     test_db
         .create_association_admin_member_treasury_fields(10, 2, 1)
         .await;
