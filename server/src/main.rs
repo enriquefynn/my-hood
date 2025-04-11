@@ -25,7 +25,7 @@ use http::{Method, HeaderValue};
 mod utils;
 
 #[derive(Parser, Debug)]
-#[command(name = "MyHood", version = "1.0", about = "An example CLI app", long_about = None)]
+#[command(name = "MyHood", version = "1.0", about = "Server-side for managing organizations", long_about = None)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,

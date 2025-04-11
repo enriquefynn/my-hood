@@ -1,6 +1,7 @@
 use crate::{
     association::graphql::{AssociationMutation, AssociationQuery},
     config::Config,
+    field::graphql::{FieldMutation, FieldQuery},
     relations::graphql::RelationsMutation,
     token::Claims,
     transaction::graphql::{TransactionMutation, TransactionQuery},
@@ -13,7 +14,7 @@ use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 use axum::{response::IntoResponse, Extension};
 
 #[derive(MergedObject, Default)]
-pub struct Query(UserQuery, AssociationQuery, TransactionQuery);
+pub struct Query(UserQuery, AssociationQuery, TransactionQuery, FieldQuery);
 
 #[derive(MergedObject, Default)]
 pub struct Mutation(
@@ -21,6 +22,7 @@ pub struct Mutation(
     AssociationMutation,
     TransactionMutation,
     RelationsMutation,
+    FieldMutation,
 );
 pub type AppSchema = Schema<Query, Mutation, EmptySubscription>;
 

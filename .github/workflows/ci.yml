@@ -66,4 +66,4 @@ jobs:
 
             - name: Run tests sequentially
               working-directory: ./server
-              run: cargo test -- --test-threads=1
+              run: cargo test

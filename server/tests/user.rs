@@ -3,19 +3,19 @@ mod test_utils;
 #[cfg(test)]
 use my_hood_server::config::Config;
 use my_hood_server::token::Claims;
-use test_utils::{get_schema_for_tests, get_users_json, setup_db};
+use test_utils::create_users_json;
 
 #[tokio::test]
 async fn test_create_user() {
-    let (db, admin) = setup_db().await;
+    let test_db = test_utils::TestDatabase::new().await;
     let config = Config::new();
 
     let claims = Claims {
-        sub: Some(admin.id),
+        sub: Some(test_db.admin.id.clone()),
         exp: 0,
-        email: admin.email,
+        email: test_db.admin.email.clone(),
     };
-    let schema = get_schema_for_tests(db.clone(), config.clone(), claims);
+    let schema = test_db.get_schema_for_tests(config.clone(), claims);
 
     let create_user_mutation = r#"mutation {
             createUser(userInput: {
@@ -54,15 +54,15 @@ async fn test_create_user() {
 
 #[tokio::test]
 async fn test_get_user() {
-    let (db, admin) = setup_db().await;
+    let test_db = test_utils::TestDatabase::new().await;
     let config = Config::new();
 
     let claims = Claims {
-        sub: Some(admin.id),
+        sub: Some(test_db.admin.id),
         exp: 0,
-        email: admin.email,
+        email: test_db.admin.email.clone(),
     };
-    let schema = get_schema_for_tests(db.clone(), config.clone(), claims);
+    let schema = test_db.get_schema_for_tests(config.clone(), claims);
 
     let get_user_query = format!(
         r#"query {{
@@ -74,7 +74,7 @@ async fn test_get_user() {
                     usesWhatsapp,
                 }}
             }}"#,
-        admin.id
+        test_db.admin.id
     );
     let request = async_graphql::Request::new(get_user_query);
     let response = schema.execute(request).await.data.into_value();
@@ -96,15 +96,15 @@ async fn test_get_user() {
 
 #[tokio::test]
 async fn test_create_association() {
-    let (db, admin) = setup_db().await;
+    let test_db = test_utils::TestDatabase::new().await;
     let config = Config::new();
 
     let claims = Claims {
-        sub: Some(admin.id),
+        sub: Some(test_db.admin.id),
         exp: 0,
-        email: admin.email,
+        email: test_db.admin.email.clone(),
     };
-    let schema = get_schema_for_tests(db.clone(), config.clone(), claims);
+    let schema = test_db.get_schema_for_tests(config.clone(), claims);
 
     let create_association_mutation = r#"mutation {
             createAssociation(association: {
@@ -143,17 +143,17 @@ async fn test_create_association() {
 
 #[tokio::test]
 async fn test_users_association() {
-    let (db, admin) = setup_db().await;
+    let test_db = test_utils::TestDatabase::new().await;
     let config = Config::new();
 
     let claims = Claims {
-        sub: Some(admin.id),
+        sub: Some(test_db.admin.id),
         exp: 0,
-        email: admin.email,
+        email: test_db.admin.email.clone(),
     };
-    let schema = get_schema_for_tests(db.clone(), config.clone(), claims);
+    let schema = test_db.get_schema_for_tests(config.clone(), claims);
 
-    let users = get_users_json(100);
+    let users = create_users_json(100);
     for create_user in users {
         let request = async_graphql::Request::new(create_user.to_string());
         let _response = schema.execute(request).await.data.into_value();
