@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use crate::{field::model::FieldReservation, DB};
 
 #[derive(Debug, Serialize, Deserialize)]
-enum ReservationPeriod {
+pub enum ReservationPeriod {
     Daily,
 }
 
@@ -17,6 +17,19 @@ pub struct ReservationRules {
 }
 
 impl ReservationRules {
+    pub fn new(
+        reservations_start_at_time_utc: chrono::NaiveTime,
+        max_duration_minutes: u32,
+        max_reservations_per_period: u32,
+        reservation_period: ReservationPeriod,
+    ) -> Self {
+        Self {
+            reservations_start_at_time_utc,
+            max_duration_minutes,
+            max_reservations_per_period,
+            reservation_period,
+        }
+    }
     pub fn from_json(json: &str) -> Result<Self, serde_json::Error> {
         serde_json::from_str(json)
     }

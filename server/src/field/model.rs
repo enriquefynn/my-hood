@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::DB;
 
-use super::rules::ReservationRules;
+use super::rules::{self, ReservationRules};
 
 #[derive(Debug, FromRow, Deserialize, Serialize)]
 pub struct Field {
@@ -33,7 +33,6 @@ pub struct FieldInput {
     // Latitude and longitude of the field.
     pub latitude: BigDecimal,
     pub longitude: BigDecimal,
-    pub deleted: bool,
 }
 
 #[derive(InputObject)]
@@ -147,6 +146,15 @@ impl Field {
 impl Field {
     pub async fn create(db: &DB, field: FieldInput) -> Result<Field, anyhow::Error> {
         let mut tx = db.begin().await?;
+        let rules_opt = &field.reservation_rules;
+        rules_opt
+            .clone()
+            .map(|json| {
+                ReservationRules::from_json(&json)
+                    .map_err(|e| anyhow::anyhow!("Failed to parse reservation rules: {}", e))
+            })
+            .transpose()?;
+
         let field = sqlx::query_as!(
             Field,
             r#"

@@ -173,25 +173,22 @@ impl User {
     }
 
     pub async fn read_one(db: &DB, id: &Uuid) -> Result<User, anyhow::Error> {
-        let mut tx = db.begin().await?;
         let user = sqlx::query_as!(User, r#"SELECT * FROM "User" WHERE id = $1"#, id)
-            .fetch_one(&mut *tx)
+            .fetch_one(&*db)
             .await?;
         Ok(user)
     }
 
     pub async fn read_one_by_email(db: &DB, email: &str) -> Result<Option<User>, anyhow::Error> {
-        let mut tx = db.begin().await?;
         let user = sqlx::query_as!(User, r#"SELECT * FROM "User" WHERE email = $1"#, email)
-            .fetch_optional(&mut *tx)
+            .fetch_optional(&*db)
             .await?;
         Ok(user)
     }
 
-    pub async fn read_all(db: DB) -> Result<Vec<User>, anyhow::Error> {
-        let mut tx = db.begin().await?;
+    pub async fn read_all(db: &DB) -> Result<Vec<User>, anyhow::Error> {
         let users = sqlx::query_as!(User, r#"SELECT * FROM "User""#)
-            .fetch_all(&mut *tx)
+            .fetch_all(&*db)
             .await?;
         Ok(users)
     }

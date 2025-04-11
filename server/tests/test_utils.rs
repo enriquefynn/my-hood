@@ -5,12 +5,16 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use chrono::NaiveDate;
+use chrono::{NaiveDate, NaiveTime};
 use dotenv::dotenv;
 use futures::future::join_all;
 use jsonwebtoken::{encode, EncodingKey, Header};
 use my_hood_server::{
     config::Config,
+    field::{
+        self,
+        rules::{ReservationPeriod, ReservationRules},
+    },
     graphql::{Mutation, Query},
     token::Claims,
     user::model::{User, UserInput},
@@ -52,8 +56,7 @@ impl TestDatabase {
                 let birthday: NaiveDate = "2012-11-19".parse().unwrap();
                 let address = "Rua A nr 1".to_string();
                 let email = format!("testuser{}@test.com", i);
-                let password = "password".to_string();
-                let password_hash = bcrypt::hash(password, 12).unwrap();
+                let password_hash = "password".to_string();
 
                 User::create(
                     &self.pool,
@@ -75,7 +78,8 @@ impl TestDatabase {
                 .unwrap()
             })
             .collect::<Vec<_>>();
-        join_all(users).await
+        let all = join_all(users).await;
+        return all;
     }
 
     pub async fn new() -> Self {
@@ -91,6 +95,7 @@ impl TestDatabase {
 
         let mut url = Url::parse(&db_url).expect("Failed to parse DATABASE_URL");
         url.set_path(&db_name);
+        println!("Creating test database: {}", url);
 
         let db_url = url.to_string();
 
@@ -111,7 +116,7 @@ impl TestDatabase {
             "Test User 1",
             NaiveDate::from_ymd_opt(2012, 11, 19).unwrap(),
             "Rua A nr 1",
-            "testuser1@test.com"
+            "default_user@test.com"
         )
         .fetch_one(&mut *tx)
         .await
@@ -139,14 +144,22 @@ impl TestDatabase {
 
     /// Creates an association with the given number of admin, member, and
     /// treasurer users.  First `num_member` users are created as members, and
-    /// `num_treasurer` users are created as treasurers.  Each user is created
-    /// with the specified number of fields.
+    /// `num_treasurer` users are created as treasurers.
     pub async fn create_association_admin_member_treasury_fields(
         &self,
-        num_member: u32,
-        num_treasurer: u32,
-        num_fields: u32,
+        n_member: u32,
+        n_treasurer: u32,
+        n_fields: u32,
     ) {
+        let admin_claim = Claims {
+            sub: Some(self.admin.id),
+            exp: 0,
+            email: self.admin.email.clone(),
+        };
+        println!(
+            "Creating association with {} members, {} treasurers and {} fields",
+            n_member, n_treasurer, n_fields
+        );
         let config = Config::new();
 
         let claims = Claims {
@@ -154,12 +167,10 @@ impl TestDatabase {
             exp: 0,
             email: self.admin.email.clone(),
         };
-        let schema = self.get_schema_for_tests(config.clone(), claims);
+        let schema = self.get_schema_for_tests(config.clone(), claims.clone());
 
-        let all_users = num_member + num_treasurer;
-
+        let all_users = n_member + n_treasurer;
         let users_json = create_users_json(all_users);
-
         let user_id_futures = users_json
             .iter()
             .map(async |user| {
@@ -197,7 +208,7 @@ impl TestDatabase {
             }}
             }}"#,
         );
-        let request = async_graphql::Request::new(create_association_mutation);
+        let request = async_graphql::Request::new(create_association_mutation).data(claims);
         let response = schema
             .execute(request)
             .await
@@ -209,20 +220,63 @@ impl TestDatabase {
             .expect("Should get id from association");
         let association_id = Uuid::parse_str(association_id).expect("Should parse id to Uuid");
 
-        let user_memberships_request = create_user_membership(user_ids, association_id);
+        let user_memberships_request = create_user_membership(user_ids.clone(), association_id);
+        let create_treasurer_requests = create_treasurers(
+            user_ids[..n_treasurer as usize].to_vec(),
+            association_id,
+            NaiveDate::from_ymd_opt(2020, 01, 01).unwrap(),
+            NaiveDate::from_ymd_opt(2100, 01, 01).unwrap(),
+        );
 
-        for user_memberships_request in user_memberships_request {
-            let request = async_graphql::Request::new(user_memberships_request);
+        for (idx, user_memberships_request) in user_memberships_request.iter().enumerate() {
+            let user_claim = Claims {
+                sub: Some(user_ids[idx]),
+                exp: 0,
+                email: Some(format!("test{}@gmail.com", idx)),
+            };
+
+            let request = async_graphql::Request::new(user_memberships_request).data(user_claim);
+
             let response = schema
                 .execute(request)
                 .await
                 .data
                 .into_json()
                 .expect("Something went wrong parsing the response");
-            let user_id = response["createUserAssociation"]["id"]
+            let user_id = response["associate"]["userId"]
                 .as_str()
                 .expect("Should get id from user");
-            let user_id = Uuid::parse_str(user_id).expect("Should parse id to Uuid");
+            Uuid::parse_str(user_id).expect("Should parse id to Uuid");
+
+            if (idx as u32) < n_treasurer {
+                let request = async_graphql::Request::new(create_treasurer_requests[idx].clone())
+                    .data(admin_claim.clone());
+                let response = schema
+                    .execute(request)
+                    .await
+                    .data
+                    .into_json()
+                    .expect("Something went wrong parsing the response");
+                let user_id = response["createAssociationTreasurer"]["userId"]
+                    .as_str()
+                    .expect("Should get id from user");
+                Uuid::parse_str(user_id).expect("Should parse id to Uuid");
+            }
+        }
+
+        let fields_query = create_fields(n_fields, association_id);
+        for field_query in fields_query {
+            let request = async_graphql::Request::new(field_query).data(admin_claim.clone());
+            let response = schema
+                .execute(request)
+                .await
+                .data
+                .into_json()
+                .expect("Something went wrong parsing the response");
+            let field_id = response["createField"]["id"]
+                .as_str()
+                .expect("Should get id from field");
+            Uuid::parse_str(field_id).expect("Should parse id to Uuid");
         }
     }
 }
@@ -302,12 +356,59 @@ pub fn create_user_membership(user_ids: Vec<Uuid>, association_id: Uuid) -> Vec<
         .map(|user_id| {
             format!(
                 r#"mutation {{
-                    associate(associationId: {})
+                    associate(associationId: "{}")
                     {{
                         userId
                     }}
                 }}"#,
                 association_id
+            )
+        })
+        .collect()
+}
+
+pub fn create_treasurers(
+    user_ids: Vec<Uuid>,
+    association_id: Uuid,
+    start_date: NaiveDate,
+    end_date: NaiveDate,
+) -> Vec<String> {
+    user_ids
+        .into_iter()
+        .map(|user_id| {
+            format!(
+                r#"mutation {{
+                    createAssociationTreasurer(userIdTreasurer: "{}", associationId: "{}", startDate: "{}", endDate: "{}")
+                    {{
+                        userId
+                    }}
+                }}"#,
+                user_id, association_id, start_date, end_date
+            )
+        })
+        .collect()
+}
+
+pub fn create_fields(n_fields: u32, association_id: Uuid) -> Vec<String> {
+    let json_rule = r#"{\"reservations_start_at_time_utc\":\"06:00:00\",\"max_duration_minutes\":60,\"max_reservations_per_period\":1,\"reservation_period\":\"Daily\"}"#;
+
+    (0..n_fields)
+        .into_iter()
+        .map(|id| {
+            format!(
+                r#"mutation {{
+                    createField(fieldInput: {{
+                        associationId: "{}", name: "Test Field {}",
+                        description: "Test field description",
+                        reservationRules: "{}",
+                        latitude: -16.42,
+                        longitude: -39.07
+                    }})
+                    {{
+                        id
+                    }}
+                }}"#,
+                association_id, id, json_rule
             )
         })
         .collect()

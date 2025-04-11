@@ -83,7 +83,7 @@ async fn test_get_user() {
         r#"{
                 "user": {
                     "name": "Test User 1",
-                    "email": "testuser1@test.com",
+                    "email": "default_user@test.com",
                     "birthday": "2012-11-19",
                     "address": "Rua A nr 1",
                     "usesWhatsapp": true
