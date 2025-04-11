@@ -15,7 +15,7 @@ use my_hood_server::{
     oauth::{callback_handler, google_oauth_client},
     relations::model::{Relations, Role},
     token::login_handler,
-    user::model::User,
+    user::model::{User, UserInput},
     DB,
 };
 use tokio::net::TcpListener;
@@ -41,6 +41,7 @@ enum Commands {
 
 #[derive(Args, Debug)]
 struct CreateUserArgs {
+    name: String,
     email: String,
     password: String,
 }
@@ -82,29 +83,6 @@ async fn run() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn create_user(email: String, password: String) -> anyhow::Result<User> {
-    let password_hash = bcrypt::hash(password, 12)?;
-    let db_url = env::var("DATABASE_URL").unwrap();
-    let db = DB::connect(&db_url).await.unwrap();
-    let mut tx = db.begin().await?;
-    let user = sqlx::query_as!(
-        User,
-        r#"INSERT INTO "User" (password_hash, name, birthday, address, email)
-            VALUES ($1, $2, $3, $4, $5)
-            RETURNING *"#,
-        password_hash,
-        "SuperUser",
-        "2021-01-01".parse::<chrono::NaiveDate>()?,
-        "SuperUser's address",
-        email,
-    )
-    .fetch_one(&mut *tx)
-    .await?;
-
-    tx.commit().await?;
-    Ok(user)
-}
-
 // Grant admin and treasurer permission to user in all associations
 async fn grant_permissions(user_id: uuid::Uuid) -> anyhow::Result<()> {
     let db_url = env::var("DATABASE_URL").unwrap();
@@ -141,12 +119,34 @@ async fn grant_permissions(user_id: uuid::Uuid) -> anyhow::Result<()> {
 async fn main() -> anyhow::Result<()> {
     dotenv()?;
     env_logger::init();
+    let db_url = env::var("DATABASE_URL").unwrap();
+    let db = DB::connect(&db_url).await.unwrap();
 
     let cli = Cli::parse();
     match cli.command {
         Commands::Run => run().await,
         Commands::CreateUser(args) => {
-            let user = create_user(args.email, args.password).await?;
+            let password_hash = bcrypt::hash(args.password, 12)?;
+            let birthday = "2000-01-01".parse().unwrap();
+            let address = "Rua A nr 1".to_owned();
+
+            let user = User::create(
+                &db,
+                UserInput {
+                    name: Some(args.name),
+                    birthday,
+                    address,
+                    email: Some(args.email),
+                    password_hash: Some(password_hash),
+                    activity: None,
+                    personal_phone: None,
+                    commercial_phone: None,
+                    uses_whatsapp: false,
+                    identities: None,
+                    profile_url: None,
+                },
+            )
+            .await; //name, birthday, address, args.email, args.password).await?;
             println!("User created: {:?}", user);
             Ok(())
         }
