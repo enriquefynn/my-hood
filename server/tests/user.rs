@@ -1,13 +1,18 @@
+mod queries;
 mod test_utils;
 
+use chrono::TimeZone;
 #[cfg(test)]
 use my_hood_server::config::Config;
-use my_hood_server::token::Claims;
-use test_utils::create_users_json;
+use my_hood_server::{token::Claims, user::model::User};
+use queries::{create_users, get_user};
 
 #[tokio::test]
 async fn test_create_user() {
-    let test_db = test_utils::TestDatabase::new().await;
+    let now = chrono::Utc
+        .with_ymd_and_hms(2024, 01, 01, 07, 0, 0)
+        .unwrap();
+    let test_db = test_utils::TestDatabase::new(now).await;
     let config = Config::new();
 
     let claims = Claims {
@@ -54,7 +59,10 @@ async fn test_create_user() {
 
 #[tokio::test]
 async fn test_get_user() {
-    let test_db = test_utils::TestDatabase::new().await;
+    let now = chrono::Utc
+        .with_ymd_and_hms(2024, 01, 01, 07, 0, 0)
+        .unwrap();
+    let test_db = test_utils::TestDatabase::new(now).await;
     let config = Config::new();
 
     let claims = Claims {
@@ -83,7 +91,7 @@ async fn test_get_user() {
         r#"{
                 "user": {
                     "name": "Test User 1",
-                    "email": "testuser1@test.com",
+                    "email": "default_user@test.com",
                     "birthday": "2012-11-19",
                     "address": "Rua A nr 1",
                     "usesWhatsapp": true
@@ -96,7 +104,10 @@ async fn test_get_user() {
 
 #[tokio::test]
 async fn test_create_association() {
-    let test_db = test_utils::TestDatabase::new().await;
+    let now = chrono::Utc
+        .with_ymd_and_hms(2024, 01, 01, 07, 0, 0)
+        .unwrap();
+    let test_db = test_utils::TestDatabase::new(now).await;
     let config = Config::new();
 
     let claims = Claims {
@@ -143,7 +154,10 @@ async fn test_create_association() {
 
 #[tokio::test]
 async fn test_users_association() {
-    let test_db = test_utils::TestDatabase::new().await;
+    let now = chrono::Utc
+        .with_ymd_and_hms(2024, 01, 01, 07, 0, 0)
+        .unwrap();
+    let test_db = test_utils::TestDatabase::new(now).await;
     let config = Config::new();
 
     let claims = Claims {
@@ -153,9 +167,33 @@ async fn test_users_association() {
     };
     let schema = test_db.get_schema_for_tests(config.clone(), claims);
 
-    let users = create_users_json(100);
+    let users = create_users(10);
     for create_user in users {
         let request = async_graphql::Request::new(create_user.to_string());
-        let _response = schema.execute(request).await.data.into_value();
+        let response = &schema
+            .execute(request)
+            .await
+            .data
+            .into_json()
+            .expect("Failed to convert response to JSON")["createUser"];
+        let user =
+            serde_json::from_value::<User>(response.clone()).expect("Failed to deserialize user");
+        let get_user_query = get_user(user.id);
+        let claim = Claims {
+            sub: Some(user.id),
+            exp: 0,
+            email: user.email.clone(),
+        };
+        let request = async_graphql::Request::new(get_user_query.to_string()).data(claim);
+        let response = &schema
+            .execute(request)
+            .await
+            .data
+            .into_json()
+            .expect("Failed to convert response to JSON")["user"];
+        let get_user =
+            serde_json::from_value::<User>(response.clone()).expect("Failed to deserialize user");
+
+        assert_eq!(user, get_user);
     }
 }

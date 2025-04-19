@@ -12,6 +12,7 @@ use crate::{
 };
 
 #[derive(Debug, FromRow, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Association {
     pub id: Uuid,
     pub name: String,
@@ -21,7 +22,7 @@ pub struct Association {
     pub address: String,
     pub identity: Option<String>,
     pub public: bool,
-    pub deleted: bool,
+    pub deleted: Option<bool>,
     pub created_at: chrono::NaiveDateTime,
     pub updated_at: chrono::NaiveDateTime,
 }
@@ -82,6 +83,14 @@ impl Association {
 
     pub async fn public(&self) -> bool {
         self.public
+    }
+
+    pub async fn created_at(&self) -> chrono::NaiveDateTime {
+        self.created_at
+    }
+
+    pub async fn updated_at(&self) -> chrono::NaiveDateTime {
+        self.updated_at
     }
 
     pub async fn members(&self, ctx: &Context<'_>) -> Result<Vec<User>, anyhow::Error> {

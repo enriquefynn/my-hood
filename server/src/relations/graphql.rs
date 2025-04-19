@@ -19,6 +19,7 @@ impl RelationsMutation {
         let user_id = claims
             .sub
             .ok_or(anyhow::Error::msg("Unauthorized, please log in"))?;
+
         let pool = ctx.data::<DB>().unwrap();
         let mut tx = pool.begin().await?;
         let user_role = Relations::create_association_role(
@@ -50,7 +51,7 @@ impl RelationsMutation {
         let mut tx = pool.begin().await?;
 
         let user = User::read_one(pool, &user_id).await?;
-        if user.is_admin(ctx, association_id).await? {
+        if !user.is_admin(ctx, association_id).await? {
             Err(anyhow::Error::msg("Only user admin can set treasurer"))?
         }
 

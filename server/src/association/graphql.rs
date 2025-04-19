@@ -44,7 +44,6 @@ pub struct AssociationMutation;
 
 #[Object]
 impl AssociationMutation {
-    // Mutate association.
     async fn create_association(
         &self,
         ctx: &Context<'_>,

@@ -9,7 +9,8 @@ use crate::{
     DB,
 };
 
-#[derive(Debug, FromRow, Deserialize, Serialize)]
+#[derive(Debug, FromRow, Deserialize, Serialize, Clone, Eq, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct User {
     pub id: Uuid,
     pub name: String,
@@ -23,7 +24,7 @@ pub struct User {
     pub uses_whatsapp: bool,
     pub identities: Option<String>,
     pub profile_url: Option<String>,
-    pub deleted: bool,
+    pub deleted: Option<bool>,
     pub created_at: chrono::NaiveDateTime,
     pub updated_at: chrono::NaiveDateTime,
 }
@@ -101,6 +102,18 @@ impl User {
         self.identities.to_owned()
     }
 
+    pub async fn profile_url(&self) -> Option<String> {
+        self.profile_url.to_owned()
+    }
+
+    pub async fn created_at(&self) -> chrono::NaiveDateTime {
+        self.created_at
+    }
+
+    pub async fn updated_at(&self) -> chrono::NaiveDateTime {
+        self.updated_at
+    }
+
     pub async fn associations(&self, ctx: &Context<'_>) -> Result<Vec<Association>, anyhow::Error> {
         let pool = ctx.data::<DB>().unwrap();
         let associations = sqlx::query_as!(
@@ -173,25 +186,22 @@ impl User {
     }
 
     pub async fn read_one(db: &DB, id: &Uuid) -> Result<User, anyhow::Error> {
-        let mut tx = db.begin().await?;
         let user = sqlx::query_as!(User, r#"SELECT * FROM "User" WHERE id = $1"#, id)
-            .fetch_one(&mut *tx)
+            .fetch_one(&*db)
             .await?;
         Ok(user)
     }
 
     pub async fn read_one_by_email(db: &DB, email: &str) -> Result<Option<User>, anyhow::Error> {
-        let mut tx = db.begin().await?;
         let user = sqlx::query_as!(User, r#"SELECT * FROM "User" WHERE email = $1"#, email)
-            .fetch_optional(&mut *tx)
+            .fetch_optional(&*db)
             .await?;
         Ok(user)
     }
 
-    pub async fn read_all(db: DB) -> Result<Vec<User>, anyhow::Error> {
-        let mut tx = db.begin().await?;
+    pub async fn read_all(db: &DB) -> Result<Vec<User>, anyhow::Error> {
         let users = sqlx::query_as!(User, r#"SELECT * FROM "User""#)
-            .fetch_all(&mut *tx)
+            .fetch_all(&*db)
             .await?;
         Ok(users)
     }

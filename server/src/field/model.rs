@@ -10,6 +10,7 @@ use crate::DB;
 use super::rules::ReservationRules;
 
 #[derive(Debug, FromRow, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Field {
     pub id: Uuid,
     pub association_id: Uuid,
@@ -19,7 +20,7 @@ pub struct Field {
     // Latitude and longitude of the field.
     pub latitude: BigDecimal,
     pub longitude: BigDecimal,
-    pub deleted: bool,
+    pub deleted: Option<bool>,
     pub created_at: chrono::NaiveDateTime,
     pub updated_at: chrono::NaiveDateTime,
 }
@@ -33,7 +34,6 @@ pub struct FieldInput {
     // Latitude and longitude of the field.
     pub latitude: BigDecimal,
     pub longitude: BigDecimal,
-    pub deleted: bool,
 }
 
 #[derive(InputObject)]
@@ -50,6 +50,7 @@ pub struct FieldUpdate {
 }
 
 #[derive(SimpleObject, Debug, FromRow, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FieldReservation {
     pub id: Uuid,
     pub field_id: Uuid,
@@ -69,7 +70,6 @@ pub struct FieldReservationInput {
     pub description: Option<String>,
     pub start_date: chrono::DateTime<chrono::Utc>,
     pub end_date: chrono::DateTime<chrono::Utc>,
-    pub deleted: bool,
 }
 
 #[derive(InputObject)]
@@ -113,8 +113,12 @@ impl Field {
         self.longitude.clone()
     }
 
-    pub async fn deleted(&self) -> bool {
-        self.deleted
+    pub async fn created_at(&self) -> chrono::NaiveDateTime {
+        self.created_at
+    }
+
+    pub async fn updated_at(&self) -> chrono::NaiveDateTime {
+        self.updated_at
     }
 
     async fn reservations(
@@ -147,6 +151,15 @@ impl Field {
 impl Field {
     pub async fn create(db: &DB, field: FieldInput) -> Result<Field, anyhow::Error> {
         let mut tx = db.begin().await?;
+        let rules_opt = &field.reservation_rules;
+        rules_opt
+            .clone()
+            .map(|json| {
+                ReservationRules::from_json(&json)
+                    .map_err(|e| anyhow::anyhow!("Failed to parse reservation rules: {}", e))
+            })
+            .transpose()?;
+
         let field = sqlx::query_as!(
             Field,
             r#"
@@ -163,36 +176,75 @@ impl Field {
         )
         .fetch_one(&mut *tx)
         .await?;
-
+        tx.commit().await?;
         Ok(field)
     }
 
     pub async fn get(db: &DB, id: &Uuid) -> Result<Field, anyhow::Error> {
-        let mut tx = db.begin().await?;
         let field = sqlx::query_as!(Field, r#"SELECT * FROM "Field" WHERE id = $1"#, id)
-            .fetch_one(&mut *tx)
+            .fetch_one(&*db)
             .await?;
-
         Ok(field)
     }
 }
 
 impl FieldReservation {
-    pub async fn create(
+    pub async fn get(
         db: &DB,
-        field: &Field,
-        field_reservation: FieldReservationInput,
+        field_reservation_id: &Uuid,
+    ) -> Result<FieldReservation, anyhow::Error> {
+        let field_reservation = sqlx::query_as!(
+            FieldReservation,
+            r#"SELECT * FROM "FieldReservation" WHERE id = $1"#,
+            field_reservation_id
+        )
+        .fetch_one(&*db)
+        .await?;
+        Ok(field_reservation)
+    }
+
+    pub async fn delete(
+        db: &DB,
+        field_reservation_id: &Uuid,
     ) -> Result<FieldReservation, anyhow::Error> {
         let mut tx = db.begin().await?;
+        let field_reservation = sqlx::query_as!(
+            FieldReservation,
+            r#"
+            UPDATE "FieldReservation" SET deleted = true WHERE id = $1 RETURNING *
+            "#,
+            field_reservation_id
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+        tx.commit().await?;
+
+        Ok(field_reservation)
+    }
+
+    pub async fn create(
+        db: &DB,
+        user_id: &Uuid,
+        field: &Field,
+        field_reservation: FieldReservationInput,
+        now: chrono::DateTime<chrono::Utc>,
+    ) -> Result<FieldReservation, anyhow::Error> {
         let rules = &field.reservation_rules;
 
         if let Some(rules) = rules {
             let rules: ReservationRules = serde_json::from_str(&rules)?;
             rules
-                .can_reserve(db, field_reservation.start_date, field_reservation.end_date)
+                .can_reserve(
+                    db,
+                    user_id,
+                    field_reservation.start_date,
+                    field_reservation.end_date,
+                    now,
+                )
                 .await?;
         }
 
+        let mut tx = db.begin().await?;
         let field_reservation = sqlx::query_as!(
             FieldReservation,
             r#"
@@ -208,6 +260,7 @@ impl FieldReservation {
         )
         .fetch_one(&mut *tx)
         .await?;
+        tx.commit().await?;
 
         Ok(field_reservation)
     }
