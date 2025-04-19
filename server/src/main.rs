@@ -100,7 +100,7 @@ async fn run() -> anyhow::Result<()> {
 }
 
 fn get_allowed_origins() -> Vec<HeaderValue> {
-    let origins = env::var("ALLOWED_ORIGINS").unwrap();
+    let origins = env::var("ALLOWED_ORIGINS").expect("ALLOWED_ORIGINS must be set");
 
     // split string by comma, trim spaces and try to convert each item to HeaderValue
     origins

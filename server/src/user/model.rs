@@ -9,7 +9,7 @@ use crate::{
     DB,
 };
 
-#[derive(Debug, FromRow, Deserialize, Serialize, Clone)]
+#[derive(Debug, FromRow, Deserialize, Serialize, Clone, Eq, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct User {
     pub id: Uuid,

@@ -1,10 +1,12 @@
+mod queries;
 mod test_utils;
 
 use chrono::TimeZone;
 #[cfg(test)]
 use my_hood_server::config::Config;
 use my_hood_server::{field::model::FieldReservation, token::Claims};
-use test_utils::{create_reservation, TestDatabase};
+use queries::create_reservation;
+use test_utils::TestDatabase;
 
 #[tokio::test]
 async fn test_create_reservation() {

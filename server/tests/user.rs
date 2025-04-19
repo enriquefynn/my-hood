@@ -1,10 +1,11 @@
+mod queries;
 mod test_utils;
 
 use chrono::TimeZone;
 #[cfg(test)]
 use my_hood_server::config::Config;
-use my_hood_server::token::Claims;
-use test_utils::create_users_json;
+use my_hood_server::{token::Claims, user::model::User};
+use queries::{create_users, get_user};
 
 #[tokio::test]
 async fn test_create_user() {
@@ -166,9 +167,33 @@ async fn test_users_association() {
     };
     let schema = test_db.get_schema_for_tests(config.clone(), claims);
 
-    let users = create_users_json(100);
+    let users = create_users(10);
     for create_user in users {
         let request = async_graphql::Request::new(create_user.to_string());
-        let _response = schema.execute(request).await.data.into_value();
+        let response = &schema
+            .execute(request)
+            .await
+            .data
+            .into_json()
+            .expect("Failed to convert response to JSON")["createUser"];
+        let user =
+            serde_json::from_value::<User>(response.clone()).expect("Failed to deserialize user");
+        let get_user_query = get_user(user.id);
+        let claim = Claims {
+            sub: Some(user.id),
+            exp: 0,
+            email: user.email.clone(),
+        };
+        let request = async_graphql::Request::new(get_user_query.to_string()).data(claim);
+        let response = &schema
+            .execute(request)
+            .await
+            .data
+            .into_json()
+            .expect("Failed to convert response to JSON")["user"];
+        let get_user =
+            serde_json::from_value::<User>(response.clone()).expect("Failed to deserialize user");
+
+        assert_eq!(user, get_user);
     }
 }

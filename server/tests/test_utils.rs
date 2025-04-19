@@ -1,3 +1,6 @@
+#[path = "queries.rs"]
+mod queries;
+
 use std::{env, sync::Arc, thread};
 
 use async_graphql::{EmptySubscription, Schema};
@@ -18,6 +21,9 @@ use my_hood_server::{
     token::Claims,
     user::model::{User, UserInput},
     Clock, DB,
+};
+use queries::{
+    create_association, create_fields, create_treasurers, create_user_membership, create_users,
 };
 use reqwest::Url;
 use sqlx::Executor;
@@ -153,6 +159,38 @@ impl TestDatabase {
             .finish()
     }
 
+    pub async fn create_members(&self, n_member: u32) {
+        let config = Config::new();
+        let admin_claim = Claims {
+            sub: Some(self.admin.id),
+            exp: 0,
+            email: self.admin.email.clone(),
+        };
+
+        let schema = self.get_schema_for_tests(config.clone(), admin_claim);
+
+        let users_json = create_users(n_member);
+        let user_id_futures = users_json
+            .iter()
+            .map(async |user| {
+                let request = async_graphql::Request::new(user.to_string());
+                let response = schema.execute(request).await;
+                if response.is_err() {
+                    panic!("Error executing request: {:?}", response);
+                }
+                let response = &response
+                    .data
+                    .into_json()
+                    .expect("Something went wrong parsing the response")["createUser"];
+
+                let user: User =
+                    serde_json::from_value(response.clone()).expect("Should deserialize user");
+                user
+            })
+            .collect::<Vec<_>>();
+        let users: Vec<User> = join_all(user_id_futures).await;
+    }
+
     /// Creates an association with the given number of admin, member, and
     /// treasurer users.  First `num_member` users are created as members, and
     /// `num_treasurer` users are created as treasurers.
@@ -173,15 +211,10 @@ impl TestDatabase {
         );
         let config = Config::new();
 
-        let claims = Claims {
-            sub: Some(self.admin.id),
-            exp: 0,
-            email: self.admin.email.clone(),
-        };
-        let schema = self.get_schema_for_tests(config.clone(), claims.clone());
+        let schema = self.get_schema_for_tests(config.clone(), admin_claim.clone());
 
         let all_users = n_member + n_treasurer;
-        let users_json = create_users_json(all_users);
+        let users_json = create_users(all_users);
         let user_id_futures = users_json
             .iter()
             .map(async |user| {
@@ -202,42 +235,22 @@ impl TestDatabase {
             .collect::<Vec<_>>();
         let users: Vec<User> = join_all(user_id_futures).await;
 
-        let create_association_mutation = format!(
-            r#"mutation {{
-            createAssociation(association: {{
-                name: "foo",
-                neighborhood: "FOOO",
-                country: "BR",
-                state: "BA",
-                address: "Foobar street",
-            }})
-            {{
-                id,
-                name,
-                neighborhood,
-                country,
-                state,
-                address,
-                identity,
-                public,
-                createdAt,
-                updatedAt,
-            }}
-            }}"#,
+        let create_association_mutation = create_association(
+            "Test Association".to_owned(),
+            "Neighborhood".to_owned(),
+            "BR".to_owned(),
+            "BA".to_owned(),
+            "Rua A nr. 2".to_owned(),
         );
-        let request = async_graphql::Request::new(create_association_mutation).data(claims);
-        let response = schema
+        let request =
+            async_graphql::Request::new(create_association_mutation).data(admin_claim.clone());
+        let response = &schema
             .execute(request)
             .await
             .data
             .into_json()
-            .expect("Something went wrong parsing the response");
-        let association_json = response["createAssociation"]
-            .as_object()
-            .expect("Should get association object");
-        let association_json =
-            serde_json::to_string(association_json).expect("Should serialize association");
-        let association = serde_json::from_str::<Association>(&association_json)
+            .expect("Something went wrong parsing the response")["createAssociation"];
+        let association = serde_json::from_value::<Association>(response.clone())
             .expect("Should deserialize association");
 
         let association_id = association.id;
@@ -368,145 +381,6 @@ pub fn app() -> Router {
             }),
         )
         .route("/requires-connect-info", get(|| async move {}))
-}
-
-pub fn create_users_json(n_users: u32) -> Vec<String> {
-    (0..n_users)
-        .into_iter()
-        .map(|id| {
-            format!(
-                r#"mutation {{
-                    createUser(userInput: {{
-                        name: "Test User {}",
-                        email: "test{}@gmail.com",
-                        birthday: "2012-11-19",
-                        address: "Rua A nr 1",
-                        usesWhatsapp: true
-                    }})
-                    {{
-                        id,
-                        name,
-                        birthday,
-                        address,
-                        activity,
-                        email,
-                        personalPhone,
-                        commercialPhone,
-                        usesWhatsapp,
-                        identities,
-                        profileUrl,
-                        createdAt,
-                        updatedAt
-                    }}
-                }}
-                "#,
-                id, id
-            )
-        })
-        .collect::<Vec<String>>()
-}
-
-pub fn create_user_membership(user_ids: Vec<Uuid>, association_id: Uuid) -> Vec<String> {
-    user_ids
-        .into_iter()
-        .map(|user_id| {
-            format!(
-                r#"mutation {{
-                    associate(associationId: "{}")
-                    {{
-                        userId
-                    }}
-                }}"#,
-                association_id
-            )
-        })
-        .collect()
-}
-
-pub fn create_treasurers(
-    user_ids: Vec<Uuid>,
-    association_id: Uuid,
-    start_date: NaiveDate,
-    end_date: NaiveDate,
-) -> Vec<String> {
-    user_ids
-        .into_iter()
-        .map(|user_id| {
-            format!(
-                r#"mutation {{
-                    createAssociationTreasurer(userIdTreasurer: "{}", associationId: "{}", startDate: "{}", endDate: "{}")
-                    {{
-                        userId
-                    }}
-                }}"#,
-                user_id, association_id, start_date, end_date
-            )
-        })
-        .collect()
-}
-
-pub fn create_fields(n_fields: u32, association_id: Uuid) -> Vec<String> {
-    let json_rule = r#"{\"reservations_start_at_time_utc\":\"06:00:00\",\"max_duration_minutes\":60,\"max_reservations_per_period\":1,\"reservation_period\":\"Daily\"}"#;
-
-    (0..n_fields)
-        .into_iter()
-        .map(|id| {
-            format!(
-                r#"mutation {{
-                    createField(fieldInput: {{
-                        associationId: "{}", name: "Test Field {}",
-                        description: "Test field description",
-                        reservationRules: "{}",
-                        latitude: -16.42,
-                        longitude: -39.07
-                    }})
-                    {{
-                        id,
-                        associationId,
-                        name,
-                        description,
-                        reservationRules,
-                        latitude,
-                        longitude,
-                        createdAt,
-                        updatedAt
-                    }}
-                }}"#,
-                association_id, id, json_rule
-            )
-        })
-        .collect()
-}
-
-pub fn create_reservation(
-    field_id: Uuid,
-    user_id: Uuid,
-    description: String,
-    start_date: DateTime<chrono::Utc>,
-    end_date: DateTime<chrono::Utc>,
-) -> String {
-    format!(
-        r#"mutation {{
-            createFieldReservation(fieldReservationInput: {{
-                fieldId: "{}", userId: "{}",
-                description: "{}",
-                startDate: "{}",
-                endDate: "{}"
-            }})
-            {{
-                id,
-                fieldId,
-                userId,
-                description,
-                startDate,
-                endDate,
-                deleted,
-                createdAt,
-                updatedAt
-            }}
-        }}"#,
-        field_id, user_id, description, start_date, end_date
-    )
 }
 
 pub struct FixedClock(DateTime<Utc>);
