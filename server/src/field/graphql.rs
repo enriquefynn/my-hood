@@ -73,7 +73,35 @@ impl FieldMutation {
         }
 
         let field_reservation =
-            FieldReservation::create(pool, &field, field_reservation_input, now).await?;
+            FieldReservation::create(pool, &user_id, &field, field_reservation_input, now).await?;
+        Ok(field_reservation)
+    }
+
+    async fn delete_field_reservation(
+        &self,
+        ctx: &Context<'_>,
+        field_reservation_id: Uuid,
+    ) -> FieldResult<FieldReservation> {
+        let claims = ctx.data::<Claims>()?;
+        let user_id = claims
+            .sub
+            .ok_or(anyhow::Error::msg("Unauthorized, please log in"))?;
+
+        let pool = ctx.data::<DB>().expect("DB pool not found");
+        let field_reservation = FieldReservation::get(pool, &field_reservation_id).await?;
+
+        if field_reservation.user_id != user_id {
+            return Err(
+                anyhow::Error::msg("User id does not match field reservation input id").into(),
+            );
+        }
+        let field = Field::get(pool, &field_reservation.field_id).await?;
+        let member = Relations::get_role(ctx, &user_id, field.association_id, Role::Member).await?;
+        if member.is_none() {
+            return Err(anyhow::Error::msg("User is not a member of the association").into());
+        }
+
+        let field_reservation = FieldReservation::delete(pool, &field_reservation_id).await?;
         Ok(field_reservation)
     }
 }

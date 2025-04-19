@@ -189,13 +189,46 @@ impl Field {
 }
 
 impl FieldReservation {
+    pub async fn get(
+        db: &DB,
+        field_reservation_id: &Uuid,
+    ) -> Result<FieldReservation, anyhow::Error> {
+        let field_reservation = sqlx::query_as!(
+            FieldReservation,
+            r#"SELECT * FROM "FieldReservation" WHERE id = $1"#,
+            field_reservation_id
+        )
+        .fetch_one(&*db)
+        .await?;
+        Ok(field_reservation)
+    }
+
+    pub async fn delete(
+        db: &DB,
+        field_reservation_id: &Uuid,
+    ) -> Result<FieldReservation, anyhow::Error> {
+        let mut tx = db.begin().await?;
+        let field_reservation = sqlx::query_as!(
+            FieldReservation,
+            r#"
+            UPDATE "FieldReservation" SET deleted = true WHERE id = $1 RETURNING *
+            "#,
+            field_reservation_id
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+        tx.commit().await?;
+
+        Ok(field_reservation)
+    }
+
     pub async fn create(
         db: &DB,
+        user_id: &Uuid,
         field: &Field,
         field_reservation: FieldReservationInput,
         now: chrono::DateTime<chrono::Utc>,
     ) -> Result<FieldReservation, anyhow::Error> {
-        let mut tx = db.begin().await?;
         let rules = &field.reservation_rules;
 
         if let Some(rules) = rules {
@@ -203,6 +236,7 @@ impl FieldReservation {
             rules
                 .can_reserve(
                     db,
+                    user_id,
                     field_reservation.start_date,
                     field_reservation.end_date,
                     now,
@@ -210,6 +244,7 @@ impl FieldReservation {
                 .await?;
         }
 
+        let mut tx = db.begin().await?;
         let field_reservation = sqlx::query_as!(
             FieldReservation,
             r#"

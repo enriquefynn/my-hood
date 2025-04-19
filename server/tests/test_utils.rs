@@ -340,22 +340,22 @@ impl TestDatabase {
 
 impl Drop for TestDatabase {
     fn drop(&mut self) {
-        // Clone values for the cleanup.
-        let admin_url = self.admin_url.clone();
-        let db_name = self.db_name.clone();
+        // // Clone values for the cleanup.
+        // let admin_url = self.admin_url.clone();
+        // let db_name = self.db_name.clone();
 
-        // Spawn a new thread and runtime to run async cleanup.
-        // This ensures that cleanup happens even if the test exits unexpectedly.
-        thread::spawn(move || {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(async {
-                if let Err(e) = cleanup_test_db(&admin_url, &db_name).await {
-                    eprintln!("Error cleaning up test database {}: {}", db_name, e);
-                }
-            });
-        })
-        .join()
-        .expect("Cleanup thread panicked");
+        // // Spawn a new thread and runtime to run async cleanup.
+        // // This ensures that cleanup happens even if the test exits unexpectedly.
+        // thread::spawn(move || {
+        //     let rt = tokio::runtime::Runtime::new().unwrap();
+        //     rt.block_on(async {
+        //         if let Err(e) = cleanup_test_db(&admin_url, &db_name).await {
+        //             eprintln!("Error cleaning up test database {}: {}", db_name, e);
+        //         }
+        //     });
+        // })
+        // .join()
+        // .expect("Cleanup thread panicked");
     }
 }
 
