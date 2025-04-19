@@ -22,8 +22,6 @@ use my_hood_server::{
 use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
 
-mod utils;
-
 #[derive(Parser, Debug)]
 #[command(name = "MyHood", version = "1.0", about = "Server-side for managing organizations", long_about = None)]
 struct Cli {

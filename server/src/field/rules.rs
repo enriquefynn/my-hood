@@ -43,8 +43,8 @@ impl ReservationRules {
         db: &DB,
         start_date_time: chrono::DateTime<chrono::Utc>,
         end_date_time: chrono::DateTime<chrono::Utc>,
+        now: chrono::DateTime<chrono::Utc>,
     ) -> Result<(), anyhow::Error> {
-        let now = chrono::Utc::now();
         match self.reservation_period {
             ReservationPeriod::Daily => {
                 if now.day() != start_date_time.day() {

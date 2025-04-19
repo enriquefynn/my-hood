@@ -1,24 +1,23 @@
-use std::{env, thread};
+use std::{env, sync::Arc, thread};
 
 use async_graphql::{EmptySubscription, Schema};
+use async_trait::async_trait;
 use axum::{
     routing::{get, post},
     Json, Router,
 };
-use chrono::{NaiveDate, NaiveTime};
+use chrono::{DateTime, NaiveDate, Utc};
 use dotenv::dotenv;
 use futures::future::join_all;
 use jsonwebtoken::{encode, EncodingKey, Header};
 use my_hood_server::{
+    association::model::Association,
     config::Config,
-    field::{
-        self,
-        rules::{ReservationPeriod, ReservationRules},
-    },
+    field::model::Field,
     graphql::{Mutation, Query},
     token::Claims,
     user::model::{User, UserInput},
-    DB,
+    Clock, DB,
 };
 use reqwest::Url;
 use sqlx::Executor;
@@ -29,6 +28,14 @@ pub struct TestDatabase {
     pub db_name: String,
     pub admin: User,
     pub admin_url: String,
+    pub clock: Arc<dyn Clock>,
+}
+
+pub struct TestAssociationUsers {
+    pub association: Association,
+    pub members: Vec<User>,
+    pub treasurers: Vec<User>,
+    pub fields: Vec<Field>,
 }
 
 impl TestDatabase {
@@ -82,7 +89,7 @@ impl TestDatabase {
         return all;
     }
 
-    pub async fn new() -> Self {
+    pub async fn new(now: DateTime<Utc>) -> Self {
         dotenv().unwrap();
         let db_url = env::var("DATABASE_URL").unwrap();
         let admin_url = db_url.clone();
@@ -122,11 +129,14 @@ impl TestDatabase {
         .await
         .unwrap();
         tx.commit().await.unwrap();
+
+        let clock = Arc::new(FixedClock(now));
         TestDatabase {
             pool,
             db_name,
             admin: user,
             admin_url,
+            clock,
         }
     }
 
@@ -139,6 +149,7 @@ impl TestDatabase {
             .data(self.pool.clone())
             .data(config)
             .data(claims)
+            .data(self.clock.clone())
             .finish()
     }
 
@@ -150,7 +161,7 @@ impl TestDatabase {
         n_member: u32,
         n_treasurer: u32,
         n_fields: u32,
-    ) {
+    ) -> TestAssociationUsers {
         let admin_claim = Claims {
             sub: Some(self.admin.id),
             exp: 0,
@@ -176,23 +187,20 @@ impl TestDatabase {
             .map(async |user| {
                 let request = async_graphql::Request::new(user.to_string());
                 let response = schema.execute(request).await;
-
                 if response.is_err() {
                     panic!("Error executing request: {:?}", response);
                 }
-
-                let response = response
+                let response = &response
                     .data
                     .into_json()
-                    .expect("Something went wrong parsing the response");
-                let user_id = response["createUser"]["id"]
-                    .as_str()
-                    .expect("Should get id from user");
-                let user_id = Uuid::parse_str(user_id).expect("Should parse id to Uuid");
-                user_id
+                    .expect("Something went wrong parsing the response")["createUser"];
+
+                let user: User =
+                    serde_json::from_value(response.clone()).expect("Should deserialize user");
+                user
             })
             .collect::<Vec<_>>();
-        let user_ids: Vec<Uuid> = join_all(user_id_futures).await;
+        let users: Vec<User> = join_all(user_id_futures).await;
 
         let create_association_mutation = format!(
             r#"mutation {{
@@ -204,7 +212,16 @@ impl TestDatabase {
                 address: "Foobar street",
             }})
             {{
-            id
+                id,
+                name,
+                neighborhood,
+                country,
+                state,
+                address,
+                identity,
+                public,
+                createdAt,
+                updatedAt,
             }}
             }}"#,
         );
@@ -215,11 +232,17 @@ impl TestDatabase {
             .data
             .into_json()
             .expect("Something went wrong parsing the response");
-        let association_id = response["createAssociation"]["id"]
-            .as_str()
-            .expect("Should get id from association");
-        let association_id = Uuid::parse_str(association_id).expect("Should parse id to Uuid");
+        let association_json = response["createAssociation"]
+            .as_object()
+            .expect("Should get association object");
+        let association_json =
+            serde_json::to_string(association_json).expect("Should serialize association");
+        let association = serde_json::from_str::<Association>(&association_json)
+            .expect("Should deserialize association");
 
+        let association_id = association.id;
+
+        let user_ids = users.iter().map(|user| user.id).collect::<Vec<Uuid>>();
         let user_memberships_request = create_user_membership(user_ids.clone(), association_id);
         let create_treasurer_requests = create_treasurers(
             user_ids[..n_treasurer as usize].to_vec(),
@@ -265,40 +288,61 @@ impl TestDatabase {
         }
 
         let fields_query = create_fields(n_fields, association_id);
-        for field_query in fields_query {
-            let request = async_graphql::Request::new(field_query).data(admin_claim.clone());
-            let response = schema
-                .execute(request)
-                .await
-                .data
-                .into_json()
-                .expect("Something went wrong parsing the response");
-            let field_id = response["createField"]["id"]
-                .as_str()
-                .expect("Should get id from field");
-            Uuid::parse_str(field_id).expect("Should parse id to Uuid");
+
+        let fields = fields_query
+            .into_iter()
+            .map(async |field_query| {
+                let request = async_graphql::Request::new(field_query).data(admin_claim.clone());
+                let response = schema
+                    .execute(request)
+                    .await
+                    .data
+                    .into_json()
+                    .expect("Something went wrong parsing the response");
+                let field_json = response["createField"]
+                    .as_object()
+                    .expect("Should get field object");
+                let field_json = serde_json::to_string(field_json).expect("Should serialize field");
+                let field: Field =
+                    serde_json::from_str(&field_json).expect("Should deserialize field");
+                field
+            })
+            .collect::<Vec<_>>();
+        let fields = join_all(fields).await;
+
+        let treasurers = users
+            .clone()
+            .iter()
+            .take(n_treasurer as usize)
+            .cloned()
+            .collect::<Vec<_>>();
+        TestAssociationUsers {
+            association,
+            members: users.clone(),
+            treasurers,
+            fields,
         }
     }
 }
 
 impl Drop for TestDatabase {
     fn drop(&mut self) {
-        // Clone values for the cleanup.
-        let admin_url = self.admin_url.clone();
-        let db_name = self.db_name.clone();
+        // // Clone values for the cleanup.
+        // let admin_url = self.admin_url.clone();
+        // let db_name = self.db_name.clone();
 
-        // Spawn a new thread and runtime to run async cleanup.
-        // This ensures that cleanup happens even if the test exits unexpectedly.
-        thread::spawn(move || {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(async {
-                if let Err(e) = cleanup_test_db(&admin_url, &db_name).await {
-                    eprintln!("Error cleaning up test database {}: {}", db_name, e);
-                }
-            });
-        })
-        .join()
-        .expect("Cleanup thread panicked");
+        // // Spawn a new thread and runtime to run async cleanup.
+        // // This ensures that cleanup happens even if the test exits unexpectedly.
+        // thread::spawn(move || {
+        //     let rt = tokio::runtime::Runtime::new().unwrap();
+        //     rt.block_on(async {
+        //         if let Err(e) = cleanup_test_db(&admin_url, &db_name).await {
+        //             eprintln!("Error cleaning up test database {}: {}", db_name, e);
+        //         }
+        //     });
+        // })
+        // .join()
+        // .expect("Cleanup thread panicked");
     }
 }
 
@@ -340,7 +384,19 @@ pub fn create_users_json(n_users: u32) -> Vec<String> {
                         usesWhatsapp: true
                     }})
                     {{
-                        id
+                        id,
+                        name,
+                        birthday,
+                        address,
+                        activity,
+                        email,
+                        personalPhone,
+                        commercialPhone,
+                        usesWhatsapp,
+                        identities,
+                        profileUrl,
+                        createdAt,
+                        updatedAt
                     }}
                 }}
                 "#,
@@ -405,11 +461,59 @@ pub fn create_fields(n_fields: u32, association_id: Uuid) -> Vec<String> {
                         longitude: -39.07
                     }})
                     {{
-                        id
+                        id,
+                        associationId,
+                        name,
+                        description,
+                        reservationRules,
+                        latitude,
+                        longitude,
+                        createdAt,
+                        updatedAt
                     }}
                 }}"#,
                 association_id, id, json_rule
             )
         })
         .collect()
+}
+
+pub fn create_reservation(
+    field_id: Uuid,
+    user_id: Uuid,
+    description: String,
+    start_date: DateTime<chrono::Utc>,
+    end_date: DateTime<chrono::Utc>,
+) -> String {
+    format!(
+        r#"mutation {{
+            createFieldReservation(fieldReservationInput: {{
+                fieldId: "{}", userId: "{}",
+                description: "{}",
+                startDate: "{}",
+                endDate: "{}"
+            }})
+            {{
+                id,
+                fieldId,
+                userId,
+                description,
+                startDate,
+                endDate,
+                deleted,
+                createdAt,
+                updatedAt
+            }}
+        }}"#,
+        field_id, user_id, description, start_date, end_date
+    )
+}
+
+pub struct FixedClock(DateTime<Utc>);
+
+#[async_trait]
+impl Clock for FixedClock {
+    fn now(&self) -> DateTime<Utc> {
+        self.0
+    }
 }

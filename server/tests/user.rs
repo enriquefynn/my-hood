@@ -1,5 +1,6 @@
 mod test_utils;
 
+use chrono::TimeZone;
 #[cfg(test)]
 use my_hood_server::config::Config;
 use my_hood_server::token::Claims;
@@ -7,7 +8,10 @@ use test_utils::create_users_json;
 
 #[tokio::test]
 async fn test_create_user() {
-    let test_db = test_utils::TestDatabase::new().await;
+    let now = chrono::Utc
+        .with_ymd_and_hms(2024, 01, 01, 07, 0, 0)
+        .unwrap();
+    let test_db = test_utils::TestDatabase::new(now).await;
     let config = Config::new();
 
     let claims = Claims {
@@ -54,7 +58,10 @@ async fn test_create_user() {
 
 #[tokio::test]
 async fn test_get_user() {
-    let test_db = test_utils::TestDatabase::new().await;
+    let now = chrono::Utc
+        .with_ymd_and_hms(2024, 01, 01, 07, 0, 0)
+        .unwrap();
+    let test_db = test_utils::TestDatabase::new(now).await;
     let config = Config::new();
 
     let claims = Claims {
@@ -96,7 +103,10 @@ async fn test_get_user() {
 
 #[tokio::test]
 async fn test_create_association() {
-    let test_db = test_utils::TestDatabase::new().await;
+    let now = chrono::Utc
+        .with_ymd_and_hms(2024, 01, 01, 07, 0, 0)
+        .unwrap();
+    let test_db = test_utils::TestDatabase::new(now).await;
     let config = Config::new();
 
     let claims = Claims {
@@ -143,7 +153,10 @@ async fn test_create_association() {
 
 #[tokio::test]
 async fn test_users_association() {
-    let test_db = test_utils::TestDatabase::new().await;
+    let now = chrono::Utc
+        .with_ymd_and_hms(2024, 01, 01, 07, 0, 0)
+        .unwrap();
+    let test_db = test_utils::TestDatabase::new(now).await;
     let config = Config::new();
 
     let claims = Claims {

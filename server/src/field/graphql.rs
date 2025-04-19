@@ -1,10 +1,12 @@
+use std::sync::Arc;
+
 use async_graphql::{Context, FieldResult, Object};
 use uuid::Uuid;
 
 use crate::{
     relations::model::{Relations, Role},
     token::Claims,
-    DB,
+    Clock, DB,
 };
 
 use super::model::{Field, FieldInput, FieldReservation, FieldReservationInput};
@@ -48,6 +50,9 @@ impl FieldMutation {
         ctx: &Context<'_>,
         field_reservation_input: FieldReservationInput,
     ) -> FieldResult<FieldReservation> {
+        let clock = ctx.data::<Arc<dyn Clock>>()?;
+        let now: chrono::DateTime<chrono::Utc> = clock.now();
+
         let claims = ctx.data::<Claims>()?;
         let user_id = claims
             .sub
@@ -68,7 +73,7 @@ impl FieldMutation {
         }
 
         let field_reservation =
-            FieldReservation::create(pool, &field, field_reservation_input).await?;
+            FieldReservation::create(pool, &field, field_reservation_input, now).await?;
         Ok(field_reservation)
     }
 }

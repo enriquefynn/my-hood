@@ -1,5 +1,6 @@
+use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use sqlx::{Pool, Postgres};
-use user::model::User;
 
 pub mod association;
 pub mod config;
@@ -13,3 +14,17 @@ pub mod transaction;
 pub mod user;
 
 pub type DB = Pool<Postgres>;
+
+#[async_trait]
+pub trait Clock: Sync + Send {
+    fn now(&self) -> DateTime<Utc>;
+}
+
+pub struct SystemClock;
+
+#[async_trait]
+impl Clock for SystemClock {
+    fn now(&self) -> DateTime<Utc> {
+        Utc::now()
+    }
+}

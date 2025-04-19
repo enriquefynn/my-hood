@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::{
     association::graphql::{AssociationMutation, AssociationQuery},
     config::Config,
@@ -6,7 +8,7 @@ use crate::{
     token::Claims,
     transaction::graphql::{TransactionMutation, TransactionQuery},
     user::graphql::{UserMutation, UserQuery},
-    DB,
+    Clock, SystemClock, DB,
 };
 
 use async_graphql::{EmptySubscription, MergedObject, Schema};
@@ -42,6 +44,7 @@ pub async fn graphql_handler(
     let mut request = req.into_inner();
     // Insert claims so that resolvers can access them via Context
     request = request.data(claims);
+    request = request.data(Arc::new(SystemClock) as Arc<dyn Clock>);
 
     let response = schema.execute(request).await;
     GraphQLResponse::from(response)
