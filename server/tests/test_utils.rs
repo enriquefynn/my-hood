@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 #[path = "queries.rs"]
 mod queries;
 
@@ -12,7 +14,6 @@ use axum::{
 use chrono::{DateTime, NaiveDate, Utc};
 use dotenv::dotenv;
 use futures::future::join_all;
-use jsonwebtoken::{encode, EncodingKey, Header};
 use my_hood_server::{
     association::model::Association,
     config::Config,
@@ -45,23 +46,6 @@ pub struct TestAssociationUsers {
 }
 
 impl TestDatabase {
-    async fn get_claim_for_user(user_id: Uuid, email: String) -> String {
-        let secret = env::var("JWT_SECRET").expect("JWT_SECRET must be set");
-
-        let claims = Claims {
-            sub: Some(user_id),
-            exp: 0,
-            email: Some(email),
-        };
-        let token = encode(
-            &Header::default(),
-            &claims,
-            &EncodingKey::from_secret(secret.as_bytes()),
-        )
-        .expect("Failed to encode token");
-        token
-    }
-
     pub async fn create_logins(&self, num_users: u32) -> Vec<User> {
         let users = (0..num_users)
             .map(async |i| {
@@ -188,7 +172,7 @@ impl TestDatabase {
                 user
             })
             .collect::<Vec<_>>();
-        let users: Vec<User> = join_all(user_id_futures).await;
+        let _users: Vec<User> = join_all(user_id_futures).await;
     }
 
     /// Creates an association with the given number of admin, member, and

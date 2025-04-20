@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use chrono::{DateTime, NaiveDate};
 use uuid::Uuid;
 
@@ -65,7 +67,7 @@ pub fn get_user(user_id: Uuid) -> String {
 pub fn create_user_membership(user_ids: Vec<Uuid>, association_id: Uuid) -> Vec<String> {
     user_ids
         .into_iter()
-        .map(|user_id| {
+        .map(|_user_id| {
             format!(
                 r#"mutation {{
                     associate(associationId: "{}")

@@ -1,13 +1,19 @@
-use async_graphql::{Context, FieldResult, Object};
+use async_graphql::{Context, FieldResult, Object, SimpleObject};
 use uuid::Uuid;
 
 use crate::{
+    oauth::get_token,
     relations::model::{Relations, Role},
     token::Claims,
     DB,
 };
 
 use super::model::{User, UserInput, UserUpdate};
+
+#[derive(SimpleObject)]
+struct AuthPayload {
+    token: String,
+}
 
 #[derive(Default)]
 pub struct UserQuery;
@@ -30,6 +36,20 @@ impl UserQuery {
                 anyhow::Error::msg("User cannot know information about other users").into(),
             );
         }
+    }
+
+    async fn renew_token(&self, ctx: &Context<'_>) -> FieldResult<AuthPayload> {
+        let claims = ctx.data::<Claims>()?;
+        let user_id = &claims
+            .sub
+            .ok_or(anyhow::Error::msg("Unauthorized, please log in"))?;
+        let pool = ctx.data::<DB>().expect("DB pool not found");
+        let user = User::read_one(pool, &user_id).await?;
+
+        let token = get_token(Some(*user_id), user.email)
+            .map_err(|_| anyhow::Error::msg("Token creation failed"))?;
+
+        Ok(AuthPayload { token })
     }
 }
 

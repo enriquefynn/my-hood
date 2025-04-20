@@ -1,6 +1,7 @@
 use std::env;
 
 use axum::{extract::Query, response::Redirect, Json};
+use jsonwebtoken::{encode, EncodingKey, Header};
 use oauth2::{
     basic::{BasicClient, BasicErrorResponseType, BasicTokenType},
     AuthUrl, AuthorizationCode, Client, ClientId, ClientSecret, CsrfToken, EmptyExtraTokenFields,
@@ -10,6 +11,7 @@ use oauth2::{
 };
 use reqwest::{ClientBuilder, StatusCode};
 use serde::Deserialize;
+use uuid::Uuid;
 
 use crate::token::{get_token_exp, Claims};
 
@@ -98,24 +100,13 @@ pub async fn callback_handler(
                     })?;
 
                     // Craft a new JWT token so user can create an account.
-                    let exp = get_token_exp();
                     let email = user_info
                         .get("email")
                         .map(|email| email.as_str().map(|email| email.to_owned()))
                         .flatten();
 
-                    let claims = Claims {
-                        sub: None,
-                        exp,
-                        email,
-                    };
-                    Ok(Json(serde_json::to_string(&claims).map_err(|err| {
-                        eprintln!("Error serializing claims: {}", err);
-                        (
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            "Error serializing claims",
-                        )
-                    })?))
+                    let token = get_token(None, email)?;
+                    Ok(Json(token))
                 }
                 Err(err) => {
                     eprintln!("Error obtaining user info: {}", err);
@@ -131,4 +122,25 @@ pub async fn callback_handler(
             Err((StatusCode::INTERNAL_SERVER_ERROR, "Error obtaining token"))
         }
     }
+}
+
+pub fn get_token(
+    sub: Option<Uuid>,
+    email: Option<String>,
+) -> Result<String, (StatusCode, &'static str)> {
+    let secret = env::var("JWT_SECRET").expect("JWT_SECRET must be set");
+    let exp = get_token_exp();
+    let claims = Claims {
+        sub,
+        exp,
+        email: email,
+    };
+
+    let token = encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    )
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Token creation failed"))?;
+    Ok(token)
 }
