@@ -7,7 +7,7 @@ pub fn create_users(n_users: u32) -> Vec<String> {
         .map(|id| {
             format!(
                 r#"mutation {{
-                    createUser(userInput: {{
+                    createOwnUser(userInput: {{
                         name: "Test User {}",
                         email: "test{}@gmail.com",
                         birthday: "2012-11-19",

@@ -23,7 +23,7 @@ async fn test_create_user() {
     let schema = test_db.get_schema_for_tests(config.clone(), claims);
 
     let create_user_mutation = r#"mutation {
-            createUser(userInput: {
+            createOwnUser(userInput: {
                 name: "Test User",
                 email: "test@gmail.com",
                 birthday: "2012-11-19",
@@ -39,12 +39,18 @@ async fn test_create_user() {
         }
         "#;
 
-    let request = async_graphql::Request::new(create_user_mutation.to_string());
+    let claim = Claims {
+        sub: None,
+        exp: 0,
+        email: Some("test@gmail.com".to_owned()),
+    };
+
+    let request = async_graphql::Request::new(create_user_mutation.to_string()).data(claim);
     let response = schema.execute(request).await.data.into_value();
 
     let expected_response = serde_json::from_str(
         r#"{
-                "createUser": {
+                "createOwnUser": {
                     "name": "Test User",
                     "email": "test@gmail.com",
                     "birthday": "2012-11-19",
@@ -168,14 +174,19 @@ async fn test_users_association() {
     let schema = test_db.get_schema_for_tests(config.clone(), claims);
 
     let users = create_users(10);
-    for create_user in users {
-        let request = async_graphql::Request::new(create_user.to_string());
+    for (i, create_user) in users.iter().enumerate() {
+        let claim = Claims {
+            sub: None,
+            exp: 0,
+            email: Some(format!("test{}@gmail.com", i)),
+        };
+        let request = async_graphql::Request::new(create_user.to_string()).data(claim);
         let response = &schema
             .execute(request)
             .await
             .data
             .into_json()
-            .expect("Failed to convert response to JSON")["createUser"];
+            .expect("Failed to convert response to JSON")["createOwnUser"];
         let user =
             serde_json::from_value::<User>(response.clone()).expect("Failed to deserialize user");
         let get_user_query = get_user(user.id);

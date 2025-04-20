@@ -181,7 +181,7 @@ impl TestDatabase {
                 let response = &response
                     .data
                     .into_json()
-                    .expect("Something went wrong parsing the response")["createUser"];
+                    .expect("Something went wrong parsing the response")["createOwnUser"];
 
                 let user: User =
                     serde_json::from_value(response.clone()).expect("Should deserialize user");
@@ -217,8 +217,14 @@ impl TestDatabase {
         let users_json = create_users(all_users);
         let user_id_futures = users_json
             .iter()
-            .map(async |user| {
-                let request = async_graphql::Request::new(user.to_string());
+            .enumerate()
+            .map(async |(i, user)| {
+                let claim = Claims {
+                    sub: None,
+                    exp: 0,
+                    email: Some(format!("test{}@gmail.com", i)),
+                };
+                let request = async_graphql::Request::new(user.to_string()).data(claim);
                 let response = schema.execute(request).await;
                 if response.is_err() {
                     panic!("Error executing request: {:?}", response);
@@ -226,7 +232,7 @@ impl TestDatabase {
                 let response = &response
                     .data
                     .into_json()
-                    .expect("Something went wrong parsing the response")["createUser"];
+                    .expect("Something went wrong parsing the response")["createOwnUser"];
 
                 let user: User =
                     serde_json::from_value(response.clone()).expect("Should deserialize user");

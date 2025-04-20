@@ -167,10 +167,3 @@ pub async fn login_handler(
 
     return Ok(Json(LoginResponse { token }));
 }
-
-// TODO: Send email with verification code etc.
-pub async fn create_user(
-    Extension(_db): Extension<DB>,
-    Json(_payload): Json<LoginOrCreateRequest>,
-) {
-}

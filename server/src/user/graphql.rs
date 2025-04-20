@@ -51,15 +51,6 @@ impl UserMutation {
         Ok(user)
     }
 
-    async fn create_user(&self, ctx: &Context<'_>, user_input: UserInput) -> FieldResult<User> {
-        let _claims = ctx.data::<Claims>()?;
-        // TODO: Add that email in `claims` can be set to user.
-
-        let pool = ctx.data::<DB>().expect("DB pool not found");
-        let user = User::create(pool, user_input).await?;
-        Ok(user)
-    }
-
     async fn toggle_pending_user(
         &self,
         ctx: &Context<'_>,

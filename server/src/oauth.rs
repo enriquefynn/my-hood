@@ -16,7 +16,8 @@ use crate::token::{get_token_exp, Claims};
 #[derive(Debug, Deserialize)]
 pub struct OAuthRequest {
     code: String,
-    _state: String,
+    #[allow(dead_code)]
+    state: String,
 }
 
 fn get_oauth_client() -> Client<
