@@ -1,4 +1,4 @@
-use async_graphql::{Context, InputObject, Object, SimpleObject};
+use async_graphql::{Context, InputObject, Object};
 use bigdecimal::BigDecimal;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -58,6 +58,7 @@ pub struct FieldReservation {
     pub description: Option<String>,
     pub start_date: chrono::DateTime<Utc>,
     pub end_date: chrono::DateTime<Utc>,
+    #[serde(skip)]
     pub deleted: bool,
     pub created_at: chrono::NaiveDateTime,
     pub updated_at: chrono::NaiveDateTime,

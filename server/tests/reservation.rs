@@ -21,7 +21,6 @@ async fn test_create_reservation() {
         .await;
 
     let field_id = test_data.fields[0].id;
-    let user_id = test_data.members[0].id;
     let description = "Test reservation for beach tennis".to_owned();
     let start_date = "2024-01-01T10:00:00Z".to_string().parse().unwrap();
     let end_date = "2024-01-01T11:00:00Z".to_string().parse().unwrap();
@@ -33,8 +32,7 @@ async fn test_create_reservation() {
     };
     let schema = test_db.get_schema_for_tests(config.clone(), user_0_claim);
 
-    let reservation_query =
-        create_reservation(field_id, user_id, description.clone(), start_date, end_date);
+    let reservation_query = create_reservation(field_id, description.clone(), start_date, end_date);
 
     let request = async_graphql::Request::new(reservation_query);
     let response = schema.execute(request).await;
@@ -46,15 +44,14 @@ async fn test_create_reservation() {
         .into_json()
         .expect("Failed to convert response to JSON")["createFieldReservation"];
 
-    let _reservation = serde_json::from_value::<FieldReservation>(response.clone())
+    let reservation = serde_json::from_value::<FieldReservation>(response.clone())
         .expect("Failed to deserialize reservation");
 
     // Try to do another reservation should fail, because
     // the user already has a reservation for today.
     let start_date = "2024-01-01T11:00:00Z".to_string().parse().unwrap();
     let end_date = "2024-01-01T12:00:00Z".to_string().parse().unwrap();
-    let reservation_query =
-        create_reservation(field_id, user_id, description.clone(), start_date, end_date);
+    let reservation_query = create_reservation(field_id, description.clone(), start_date, end_date);
 
     let request = async_graphql::Request::new(reservation_query);
     let response = schema.execute(request).await;
@@ -62,8 +59,8 @@ async fn test_create_reservation() {
 
     // DELETE RESERVATION.
     let delete_reservation_query = format!(
-        r#"mutation {{ deleteFieldReservation(id: "{}") {{ deleted }} }}"#,
-        _reservation.id
+        r#"mutation {{ deleteFieldReservation(id: "{}") {{ id }} }}"#,
+        reservation.id
     );
     let request = async_graphql::Request::new(delete_reservation_query);
     let response = &schema
@@ -71,15 +68,16 @@ async fn test_create_reservation() {
         .await
         .data
         .into_json()
-        .expect("Failed to convert response to JSON")["deleteFieldReservation"]["deleted"];
-    assert_eq!(response, true);
+        .expect("Failed to convert response to JSON")["deleteFieldReservation"]["id"];
+    let reservation_id = serde_json::from_value::<String>(response.clone())
+        .expect("Failed to deserialize reservation id");
+    assert_eq!(reservation_id, reservation.id.to_string());
 
     // Try to do another reservation should work, because
     // the user doesn't have any reservation for today.
     let start_date = "2024-01-01T11:00:00Z".to_string().parse().unwrap();
     let end_date = "2024-01-01T12:00:00Z".to_string().parse().unwrap();
-    let reservation_query =
-        create_reservation(field_id, user_id, description, start_date, end_date);
+    let reservation_query = create_reservation(field_id, description, start_date, end_date);
     let request = async_graphql::Request::new(reservation_query);
     let response = schema.execute(request).await;
     if response.is_err() {
@@ -109,7 +107,6 @@ async fn test_create_reservation_before_rule_time() {
         .await;
 
     let field_id = test_data.fields[0].id;
-    let user_id = test_data.members[0].id;
     let description = "Test reservation for beach tennis".to_owned();
     let start_date = "2024-01-01T10:00:00Z".to_string().parse().unwrap();
     let end_date = "2024-01-01T11:00:00Z".to_string().parse().unwrap();
@@ -121,8 +118,7 @@ async fn test_create_reservation_before_rule_time() {
     };
     let schema = test_db.get_schema_for_tests(config.clone(), user_0_claim);
 
-    let reservation_query =
-        create_reservation(field_id, user_id, description.clone(), start_date, end_date);
+    let reservation_query = create_reservation(field_id, description.clone(), start_date, end_date);
 
     let request = async_graphql::Request::new(reservation_query);
     let response = schema.execute(request).await;
@@ -142,7 +138,6 @@ async fn test_create_reservation_tomorrow() {
         .await;
 
     let field_id = test_data.fields[0].id;
-    let user_id = test_data.members[0].id;
     let description = "Test reservation for beach tennis".to_owned();
     let start_date = "2024-01-02T10:00:00Z".to_string().parse().unwrap();
     let end_date = "2024-01-02T11:00:00Z".to_string().parse().unwrap();
@@ -154,8 +149,7 @@ async fn test_create_reservation_tomorrow() {
     };
     let schema = test_db.get_schema_for_tests(config.clone(), user_0_claim);
 
-    let reservation_query =
-        create_reservation(field_id, user_id, description.clone(), start_date, end_date);
+    let reservation_query = create_reservation(field_id, description.clone(), start_date, end_date);
 
     let request = async_graphql::Request::new(reservation_query);
     let response = schema.execute(request).await;

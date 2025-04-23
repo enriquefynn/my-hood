@@ -138,7 +138,6 @@ pub fn create_fields(n_fields: u32, association_id: Uuid) -> Vec<String> {
 
 pub fn create_reservation(
     field_id: Uuid,
-    user_id: Uuid,
     description: String,
     start_date: DateTime<chrono::Utc>,
     end_date: DateTime<chrono::Utc>,
@@ -147,7 +146,6 @@ pub fn create_reservation(
         r#"mutation {{
             createFieldReservation(fieldReservationInput: {{
                 fieldId: "{}",
-                userId: "{}",
                 description: "{}",
                 startDate: "{}",
                 endDate: "{}"
@@ -159,12 +157,11 @@ pub fn create_reservation(
                 description,
                 startDate,
                 endDate,
-                deleted,
                 createdAt,
                 updatedAt
             }}
         }}"#,
-        field_id, user_id, description, start_date, end_date
+        field_id, description, start_date, end_date
     )
 }
 
