@@ -20,7 +20,8 @@ use my_hood_server::{
     DB,
 };
 use tokio::net::TcpListener;
-use tower_http::cors::{Any, CorsLayer};
+use tower_cookies::CookieManagerLayer;
+use tower_http::cors::CorsLayer;
 
 #[derive(Parser, Debug)]
 #[command(name = "MyHood", version = "1.0", about = "Server-side for managing organizations", long_about = None)]
@@ -71,6 +72,7 @@ async fn run() -> anyhow::Result<()> {
     // CORS middleware
     let cors = CorsLayer::new()
         .allow_origin(allowed_origins)
+        .allow_credentials(true)
         .allow_methods(vec![
             Method::GET,
             Method::POST,
@@ -78,7 +80,11 @@ async fn run() -> anyhow::Result<()> {
             Method::DELETE,
             Method::OPTIONS,
         ])
-        .allow_headers(Any);
+        .allow_headers([
+            http::header::CONTENT_TYPE,
+            http::header::ACCEPT,
+            http::header::AUTHORIZATION,
+        ]);
 
     let app = Router::new()
         .route("/", get(graphql_playground).post(post(graphql_handler)))
@@ -87,7 +93,8 @@ async fn run() -> anyhow::Result<()> {
         .route("/oauth/google/callback", get(callback_handler))
         .layer(Extension(schema))
         .layer(Extension(db))
-        .layer(cors);
+        .layer(cors)
+        .layer(CookieManagerLayer::new());
 
     println!("Serving on http://{host}:{port}");
     axum::serve(

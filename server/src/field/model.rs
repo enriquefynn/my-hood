@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
-use crate::DB;
+use crate::{user::model::User, DB};
 
 use super::rules::ReservationRules;
 
@@ -49,7 +49,7 @@ pub struct FieldUpdate {
     pub deleted: Option<bool>,
 }
 
-#[derive(SimpleObject, Debug, FromRow, Deserialize, Serialize)]
+#[derive(Debug, FromRow, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FieldReservation {
     pub id: Uuid,
@@ -66,7 +66,6 @@ pub struct FieldReservation {
 #[derive(Debug, InputObject, Deserialize)]
 pub struct FieldReservationInput {
     pub field_id: Uuid,
-    pub user_id: Uuid,
     pub description: Option<String>,
     pub start_date: chrono::DateTime<chrono::Utc>,
     pub end_date: chrono::DateTime<chrono::Utc>,
@@ -188,6 +187,49 @@ impl Field {
     }
 }
 
+#[Object]
+impl FieldReservation {
+    pub async fn id(&self) -> Uuid {
+        self.id
+    }
+
+    pub async fn field_id(&self) -> Uuid {
+        self.field_id
+    }
+
+    pub async fn user_id(&self) -> Uuid {
+        self.user_id
+    }
+
+    pub async fn description(&self) -> Option<String> {
+        self.description.clone()
+    }
+
+    pub async fn start_date(&self) -> chrono::DateTime<Utc> {
+        self.start_date
+    }
+
+    pub async fn end_date(&self) -> chrono::DateTime<Utc> {
+        self.end_date
+    }
+
+    pub async fn created_at(&self) -> chrono::NaiveDateTime {
+        self.created_at
+    }
+
+    pub async fn updated_at(&self) -> chrono::NaiveDateTime {
+        self.updated_at
+    }
+
+    pub async fn user(&self, ctx: &Context<'_>) -> Result<User, anyhow::Error> {
+        let pool = ctx.data::<DB>().unwrap();
+        let user = sqlx::query_as!(User, r#"SELECT * FROM "User" WHERE id = $1"#, self.user_id)
+            .fetch_one(&*pool)
+            .await?;
+        Ok(user)
+    }
+}
+
 impl FieldReservation {
     pub async fn get(
         db: &DB,
@@ -253,7 +295,7 @@ impl FieldReservation {
             RETURNING *
             "#,
             field.id,
-            field_reservation.user_id,
+            user_id,
             field_reservation.description,
             field_reservation.start_date,
             field_reservation.end_date

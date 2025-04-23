@@ -1,6 +1,10 @@
 use std::env;
 
-use axum::{extract::Query, response::Redirect, Json};
+use axum::{
+    extract::Query,
+    response::{IntoResponse, Redirect},
+    Extension,
+};
 use jsonwebtoken::{encode, EncodingKey, Header};
 use oauth2::{
     basic::{BasicClient, BasicErrorResponseType, BasicTokenType},
@@ -11,9 +15,14 @@ use oauth2::{
 };
 use reqwest::{ClientBuilder, StatusCode};
 use serde::Deserialize;
+use tower_cookies::{Cookie, Cookies};
 use uuid::Uuid;
 
-use crate::token::{get_token_exp, Claims};
+use crate::{
+    token::{get_token_exp, Claims},
+    user::model::User,
+    DB,
+};
 
 #[derive(Debug, Deserialize)]
 pub struct OAuthRequest {
@@ -66,7 +75,9 @@ pub async fn google_oauth_client() -> Redirect {
 /// Handler to receive the callback from the OAuth provider.
 pub async fn callback_handler(
     Query(params): Query<OAuthRequest>,
-) -> Result<Json<String>, (StatusCode, &'static str)> {
+    db: Extension<DB>,
+    cookies: Cookies,
+) -> Result<impl IntoResponse, (StatusCode, &'static str)> {
     let client = get_oauth_client();
 
     // TODO: Verify that `params.state` matches the previously stored CSRF token.
@@ -100,13 +111,38 @@ pub async fn callback_handler(
                     })?;
 
                     // Craft a new JWT token so user can create an account.
-                    let email = user_info
+                    let email_opt = user_info
                         .get("email")
                         .map(|email| email.as_str().map(|email| email.to_owned()))
                         .flatten();
 
-                    let token = get_token(None, email)?;
-                    Ok(Json(token))
+                    let (id, email) = if let Some(email) = &email_opt {
+                        let user = User::read_one_by_email(&db, email).await.map_err(|_| {
+                            (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                "Error reading user from DB",
+                            )
+                        })?;
+                        match user {
+                            Some(user) => (Some(user.id), user.email),
+                            None => (None, Some(email.clone())),
+                        }
+                    } else {
+                        (None, None)
+                    };
+
+                    let token = get_token(id, email)?;
+                    let mut auth_cookie = Cookie::new("auth_token", token.clone());
+                    auth_cookie.set_path("/");
+                    auth_cookie.set_http_only(false);
+                    cookies.add(auth_cookie);
+
+                    if id.is_some() {
+                        // User exists, redirect to the calendar
+                        Ok(Redirect::to("http://localhost:3000/calendar"))
+                    } else {
+                        Ok(Redirect::to("http://localhost:3000/user/register"))
+                    }
                 }
                 Err(err) => {
                     eprintln!("Error obtaining user info: {}", err);

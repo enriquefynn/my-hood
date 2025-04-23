@@ -1,6 +1,6 @@
 use std::{env, future::Future};
 
-use crate::user::model::User;
+use crate::{oauth::get_token, user::model::User};
 use anyhow::Error;
 use axum::{
     extract::{FromRequest, FromRequestParts, Request},
@@ -9,9 +9,10 @@ use axum::{
     Extension, Json,
 };
 use chrono::{Duration, Utc};
-use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, TokenData, Validation};
+use jsonwebtoken::{decode, DecodingKey, TokenData, Validation};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
+use tower_cookies::Cookies;
 
 use crate::DB;
 
@@ -55,8 +56,9 @@ where
 {
     type Rejection = (StatusCode, &'static str);
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        let claims = extract_claims_from_header(&parts.headers);
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let cookies = Cookies::from_request_parts(parts, state).await.unwrap();
+        let claims = extract_claims_from_request(&parts.headers, &cookies);
         match claims {
             Some(claims) => Ok(claims),
             None => Err((StatusCode::UNAUTHORIZED, "Missing or invalid token")),
@@ -64,14 +66,26 @@ where
     }
 }
 
-pub fn extract_claims_from_header(header_map: &HeaderMap) -> Option<Claims> {
-    let auth_header = header_map.get("Authorization")?;
-    let auth_str = auth_header.to_str().ok()?;
-    let token = auth_str.strip_prefix("Bearer ")?;
-    match validate_token(token) {
-        Ok(token_claims) => Some(token_claims),
-        Err(_) => None,
+pub fn extract_claims_from_request(headers: &HeaderMap, cookies: &Cookies) -> Option<Claims> {
+    // First, try Authorization header
+    if let Some(auth_header) = headers.get("Authorization") {
+        if let Ok(auth_str) = auth_header.to_str() {
+            if let Some(token) = auth_str.strip_prefix("Bearer ") {
+                if let Ok(claims) = validate_token(token) {
+                    return Some(claims);
+                }
+            }
+        }
     }
+
+    // If no header, fallback to auth_token cookie
+    if let Some(cookie) = cookies.get("auth_token") {
+        if let Ok(claims) = validate_token(cookie.value()) {
+            return Some(claims);
+        }
+    }
+
+    None
 }
 
 // Function to validate JWT token
@@ -109,8 +123,6 @@ pub async fn login_handler(
     Extension(db): Extension<DB>,
     Json(payload): Json<LoginOrCreateRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, &'static str)> {
-    let secret = env::var("JWT_SECRET").expect("JWT_SECRET must be set");
-
     let mut tx = db
         .begin()
         .await
@@ -157,13 +169,6 @@ pub async fn login_handler(
         },
     };
 
-    // Encode the token using the secret key.
-    let token = encode(
-        &Header::default(),
-        &claims,
-        &EncodingKey::from_secret(secret.as_bytes()),
-    )
-    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Token creation failed"))?;
-
+    let token = get_token(claims.sub, claims.email.clone())?;
     return Ok(Json(LoginResponse { token }));
 }

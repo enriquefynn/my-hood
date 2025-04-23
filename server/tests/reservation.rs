@@ -62,7 +62,7 @@ async fn test_create_reservation() {
 
     // DELETE RESERVATION.
     let delete_reservation_query = format!(
-        r#"mutation {{ deleteFieldReservation(fieldReservationId: "{}") {{ deleted }} }}"#,
+        r#"mutation {{ deleteFieldReservation(id: "{}") {{ deleted }} }}"#,
         _reservation.id
     );
     let request = async_graphql::Request::new(delete_reservation_query);

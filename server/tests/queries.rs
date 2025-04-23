@@ -146,7 +146,8 @@ pub fn create_reservation(
     format!(
         r#"mutation {{
             createFieldReservation(fieldReservationInput: {{
-                fieldId: "{}", userId: "{}",
+                fieldId: "{}",
+                userId: "{}",
                 description: "{}",
                 startDate: "{}",
                 endDate: "{}"
