@@ -1,25 +1,11 @@
-use async_graphql::{Context, FieldResult, Object, SimpleObject};
-use sqlx::QueryBuilder;
+use async_graphql::{Context, FieldResult, Object};
 use uuid::Uuid;
 
 use crate::{
-    relations::model::{Relations, Role},
-    token::Claims,
-    DB,
+    association::model::{AssocFilter, AssociationsPage}, relations::model::{Relations, Role}, token::Claims, DB
 };
 
 use super::model::{Association, AssociationInput, AssociationUpdate};
-
-#[derive(SimpleObject)]
-pub struct AssociationsPage {
-    pub total_size: i64,
-    pub page: i64,
-    pub page_size: i64,
-    pub total_pages: i64,
-    pub has_previous_page: bool,
-    pub has_next_page: bool,
-    pub items: Vec<Association>,
-}
 
 #[derive(Default)]
 pub struct AssociationQuery;
@@ -46,82 +32,16 @@ impl AssociationQuery {
             .ok_or_else(|| anyhow::Error::msg("Unauthorized, please log in"))?;
         let pool = ctx.data::<DB>()?;
 
-        // Normaliza page e page_size
-        let page_size = if page_size > 0 { page_size } else { 100 };
-        let mut page = if page > 0 { page } else { 1 };
-
-        let member_only = member.unwrap_or(false);
-        let search_pattern = search.map(|s| format!("%{}%", s));
-
-        let mut count_qb = QueryBuilder::new(
-            r#"SELECT COUNT(DISTINCT a.id) FROM "Association" a"#,
-        );
-
-        if member_only {
-            count_qb
-                .push(r#" JOIN "AssociationRoles" ar ON a.id = ar.association_id AND ar.user_id = "#)
-                .push_bind(user_id.clone())
-                .push(" WHERE ar.user_id IS NOT NULL");
-        } else {
-            count_qb.push(" WHERE a.public = TRUE");
-        }
-
-        if let Some(ref pat) = search_pattern {
-            count_qb
-                .push(" AND a.name ILIKE ")
-                .push_bind(pat);
-        }
-
-        let total_size: i64 = count_qb
-            .build_query_scalar()
-            .fetch_one(pool)
-            .await?;
-
-        let total_pages = (total_size + page_size - 1) / page_size;
-        page = page.min(total_pages.max(1));
-        let offset = (page - 1) * page_size;
-
-        let mut qb = QueryBuilder::new(
-            r#"SELECT DISTINCT a.* FROM "Association" a"#,
-        );
-
-        if member_only {
-            qb
-                .push(" JOIN \"AssociationRoles\" ar ON a.id = ar.association_id AND ar.user_id = ")
-                .push_bind(user_id)
-                .push(" WHERE ar.user_id IS NOT NULL");
-        } else {
-            qb.push(" WHERE a.public = TRUE");
-        }
-
-        if let Some(ref pat) = search_pattern {
-            qb
-                .push(" AND a.name ILIKE ")
-                .push_bind(pat);
-        }
-        
-        qb
-            .push(" ORDER BY a.name")
-            .push(" LIMIT ")
-            .push_bind(page_size)
-            .push(" OFFSET ")
-            .push_bind(offset);
-
-        let items: Vec<Association> = qb
-            .build_query_as()
-            .fetch_all(pool)
-            .await?;
-
-        // Retorna o page object
-        Ok(AssociationsPage {
-            total_size,
+        let filter = AssocFilter {
+            search,
+            member_only: member.unwrap_or(false),
+            user_id: if member.unwrap_or(false) { Some(user_id) } else { None },
             page,
             page_size,
-            total_pages,
-            has_previous_page: page > 1,
-            has_next_page:     page < total_pages,
-            items,
-        })
+        };
+
+        let page_obj = Association::read_filtered_paginated(pool, filter).await?;
+        Ok(page_obj)
     }
     
     // Query association.
