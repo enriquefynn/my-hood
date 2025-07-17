@@ -7,15 +7,14 @@ use axum::{
 };
 use jsonwebtoken::{encode, EncodingKey, Header};
 use oauth2::{
-    basic::{BasicClient, BasicErrorResponseType, BasicTokenType},
-    AuthUrl, AuthorizationCode, Client, ClientId, ClientSecret, CsrfToken, EmptyExtraTokenFields,
-    EndpointNotSet, EndpointSet, RedirectUrl, RevocationErrorResponseType, Scope,
-    StandardErrorResponse, StandardRevocableToken, StandardTokenIntrospectionResponse,
-    StandardTokenResponse, TokenResponse, TokenUrl,
+    basic::{BasicClient}, 
+    AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, 
+    EndpointNotSet, EndpointSet, PkceCodeChallenge, PkceCodeVerifier, RedirectUrl, Scope, 
+    TokenResponse, TokenUrl
 };
 use reqwest::{ClientBuilder, StatusCode};
 use serde::Deserialize;
-use tower_cookies::{Cookie, Cookies};
+use tower_cookies::{cookie, Cookie, Cookies};
 use uuid::Uuid;
 
 use crate::{
@@ -31,18 +30,18 @@ pub struct OAuthRequest {
     state: String,
 }
 
-fn get_oauth_client() -> Client<
-    StandardErrorResponse<BasicErrorResponseType>,
-    StandardTokenResponse<EmptyExtraTokenFields, BasicTokenType>,
-    StandardTokenIntrospectionResponse<EmptyExtraTokenFields, BasicTokenType>,
-    StandardRevocableToken,
-    StandardErrorResponse<RevocationErrorResponseType>,
+#[derive(Deserialize)]
+pub struct LoginParams { redirect: Option<String> }
+
+type GoogleClient = BasicClient<
     EndpointSet,
     EndpointNotSet,
     EndpointNotSet,
     EndpointNotSet,
-    EndpointSet,
-> {
+    EndpointSet
+>;
+
+fn get_oauth_client() -> GoogleClient {
     let client_id = ClientId::new(env::var("GOOGLE_OAUTH_CLIENT_ID").expect("Missing client ID"));
     let client_secret =
         ClientSecret::new(env::var("GOOGLE_OAUTH_CLIENT_SECRET").expect("Missing client secret"));
@@ -62,13 +61,46 @@ fn get_oauth_client() -> Client<
         .set_redirect_uri(rediret_url)
 }
 
-pub async fn google_oauth_client() -> Redirect {
+pub async fn google_oauth_client(Query(params): Query<LoginParams>, cookies: Cookies) -> Redirect {
     let client = get_oauth_client();
 
-    let (auth_url, _csrf_state) = client
+    // If a redirect URL is provided, store it in a cookie to redirect after login.
+    if let Some(r) = &params.redirect {
+        cookies.add(
+            Cookie::build(("post_oauth_redirect", r.clone()))
+                .http_only(true)
+                .same_site(cookie::SameSite::Lax)
+                .path("/")
+                .build(),
+        );
+    }
+
+    let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
+
+    // Store the PKCE verifier in a cookie for later use.
+    cookies.add(
+        Cookie::build(("pkce_verifier", pkce_verifier.secret().to_string()))
+            .http_only(true)
+            .same_site(cookie::SameSite::Lax)
+            .path("/")
+            .build(),
+    );
+
+    let (auth_url, csrf_state) = client
         .authorize_url(CsrfToken::new_random)
         .add_scope(Scope::new("email".to_owned()))
+        .set_pkce_challenge(pkce_challenge)
         .url();
+
+    // Store the CSRF state in a cookie to verify later.
+    cookies.add(
+        Cookie::build(("oauth_state", csrf_state.secret().to_string()))
+            .http_only(true)
+            .same_site(cookie::SameSite::Lax)
+            .path("/")
+            .build(),
+    );
+
     Redirect::to(auth_url.as_ref())
 }
 
@@ -81,6 +113,21 @@ pub async fn callback_handler(
     let client = get_oauth_client();
 
     // TODO: Verify that `params.state` matches the previously stored CSRF token.
+    
+    let cookie_state = cookies
+        .get("oauth_state")
+        .ok_or((StatusCode::BAD_REQUEST, "Missing state cookie"))?;
+
+    if cookie_state.value() != params.state {
+        return Err((StatusCode::BAD_REQUEST, "Invalid CSRF state"));
+    }
+
+    // Retrieve the PKCE verifier from the cookie.
+    let pkce_verifier_cookie = cookies
+        .get("pkce_verifier")
+        .ok_or((StatusCode::BAD_REQUEST, "Missing PKCE verifier"))?;
+
+    let pkce_verifier = PkceCodeVerifier::new(pkce_verifier_cookie.value().to_string());
 
     let http_client = ClientBuilder::new()
         // Following redirects opens the client up to SSRF vulnerabilities.
@@ -91,6 +138,7 @@ pub async fn callback_handler(
     // Exchange the authorization code for an access token.
     let token_result = client
         .exchange_code(AuthorizationCode::new(params.code))
+        .set_pkce_verifier(pkce_verifier)
         .request_async(&http_client)
         .await;
 
@@ -137,12 +185,15 @@ pub async fn callback_handler(
                     auth_cookie.set_http_only(false);
                     cookies.add(auth_cookie);
 
-                    if id.is_some() {
-                        // User exists, redirect to the calendar
-                        Ok(Redirect::to("http://localhost:3000/calendar"))
-                    } else {
-                        Ok(Redirect::to("http://localhost:3000/user/register"))
-                    }
+                    // Redirect to the post-login URL with the token.
+                    let redirect_target = cookies
+                        .get("post_oauth_redirect")
+                        .map(|c| c.value().to_string())
+                        .unwrap_or_else(|| env::var("WEB_POST_LOGIN_URL").unwrap());
+
+                    let location = format!("{}?token={}", redirect_target, token);
+
+                    Ok(Redirect::to(&location))
                 }
                 Err(err) => {
                     eprintln!("Error obtaining user info: {}", err);
