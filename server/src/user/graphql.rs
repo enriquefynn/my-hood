@@ -75,6 +75,7 @@ impl UserMutation {
         &self,
         ctx: &Context<'_>,
         association_id: Uuid,
+        target_user_id: Option<Uuid>,
     ) -> FieldResult<bool> {
         let claims = ctx.data::<Claims>()?;
         let user_id = &claims
@@ -84,7 +85,13 @@ impl UserMutation {
         let role = Relations::get_role(ctx, user_id, association_id, Role::Admin).await?;
         if role.is_some() {
             let pool = ctx.data::<DB>().expect("DB pool not found");
-            let toggle_user = User::toggle_approve(pool, &user_id, &association_id).await?;
+
+            let user_to_toggle: &Uuid = match target_user_id.as_ref() {
+                Some(id) => id,
+                None => user_id,
+            };
+
+            let toggle_user = User::toggle_approve(pool, &user_to_toggle, &association_id).await?;
             Ok(toggle_user)
         } else {
             Err(anyhow::Error::msg("Unauthorized, please log in").into())
