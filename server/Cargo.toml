@@ -30,6 +30,8 @@ oauth2 = { version = "5.0.0", features = ["reqwest"] }
 tower-http = { version = "0.6.2", features = ["cors"] }
 tower-cookies = "0.11.0"
 http = "1.3.1"
+regex = "1.11.2"
+once_cell = "1.21.3"
 
 [dev-dependencies]
 tower = { version = "0.5.2", features = ["util"] }
