@@ -6,6 +6,7 @@ use crate::{
     relations::model::{Relations, Role},
     token::Claims,
     DB,
+    user::model::{PendingMembersPage}
 };
 
 use super::model::{User, UserInput, UserUpdate};
@@ -20,6 +21,25 @@ pub struct UserQuery;
 
 #[Object(extends)]
 impl UserQuery {
+
+    /// List, paginated, the **pending members** in associations
+    /// where the authenticated user is an **admin**.
+    async fn pending_users(
+        &self,
+        ctx: &Context<'_>,
+        #[graphql(default = 1)] page: i64,
+        #[graphql(name = "pageSize", default = 100)] page_size: i64,
+    ) -> FieldResult<PendingMembersPage> {
+        let claims = ctx.data::<Claims>()?;
+        let user_id = claims
+            .sub
+            .ok_or_else(|| anyhow::Error::msg("Unauthorized, please log in"))?;
+        let pool = ctx.data::<DB>()?;
+
+        let page_obj = User::read_pendings_paginated(pool, user_id, page, page_size).await?;
+        Ok(page_obj)
+    }
+
     // Query user.
     async fn user(&self, ctx: &Context<'_>, id: Uuid) -> FieldResult<User> {
         let claims = ctx.data::<Claims>()?;

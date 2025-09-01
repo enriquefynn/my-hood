@@ -1,4 +1,4 @@
-use async_graphql::{Context, InputObject, Object};
+use async_graphql::{Context, InputObject, Object, SimpleObject};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -60,6 +60,35 @@ pub struct UserUpdate {
     pub identities: Option<String>,
     pub profile_url: Option<String>,
     pub deleted: Option<bool>,
+}
+
+#[derive(SimpleObject, sqlx::FromRow)]
+pub struct PendingMember{
+    pub id: Uuid,
+    pub name: String,
+    pub birthday: chrono::NaiveDate,
+    pub address: String,
+    pub activity: Option<String>,
+    pub email: Option<String>,
+    pub personal_phone: Option<String>,
+    pub commercial_phone: Option<String>,
+    pub uses_whatsapp: bool,
+    pub identities: Option<String>,
+    pub profile_url: Option<String>,
+    pub association_id: uuid::Uuid,
+    pub association_name: String,
+    pub requested_at: chrono::NaiveDateTime,
+}
+
+#[derive(async_graphql::SimpleObject)]
+pub struct PendingMembersPage {
+    pub total_size: i64,
+    pub page: i64,
+    pub page_size: i64,
+    pub total_pages: i64,
+    pub has_previous_page: bool,
+    pub has_next_page: bool,
+    pub items: Vec<PendingMember>,
 }
 
 static BCRYPT_RE: Lazy<Regex> = Lazy::new(|| {
@@ -220,6 +249,82 @@ impl User {
             .fetch_all(&*db)
             .await?;
         Ok(users)
+    }
+
+    /// Return a paginated page of **association pending requests** (user requesting to join as `member`) 
+    /// **only** in associations where `admin_user_id` is **admin (not pending)**.
+    pub async fn read_pendings_paginated(db: &DB, admin_user_id: Uuid, mut page: i64, page_size: i64
+    ) -> Result<PendingMembersPage, anyhow::Error> {
+        // -------- COUNT ----------
+        let total_size: i64 = sqlx::query_scalar!(
+            r#"
+            SELECT COUNT(DISTINCT (u.id, ar.association_id))
+            FROM "AssociationRoles" ar
+            JOIN "User" u ON u.id = ar.user_id
+            JOIN "Association" a ON a.id = ar.association_id
+            WHERE COALESCE(u.deleted, FALSE) = FALSE
+            AND COALESCE(a.deleted, FALSE) = FALSE
+            AND ar.role = 'member'
+            AND ar.pending = TRUE
+            AND u.id <> $1
+            AND EXISTS (
+                SELECT 1 FROM "AssociationRoles" adm
+                WHERE adm.association_id = ar.association_id
+                AND adm.user_id = $1
+                AND adm.role = 'admin'
+                AND adm.pending = FALSE
+            )
+            "#,
+            admin_user_id
+        ).fetch_one(db).await?.unwrap_or(0);
+
+        // -------- pagination ----------
+        let page_size = page_size.max(1);
+        let total_pages = (total_size + page_size - 1) / page_size;
+        page = page.max(1).min(total_pages.max(1));
+        let offset = (page - 1) * page_size;
+
+        // -------- DATA ----------
+        let items: Vec<PendingMember> = sqlx::query_as!(
+            PendingMember,
+            r#"
+            SELECT
+            u.id, u.name, u.birthday, u.address, u.activity,
+            u.email, u.personal_phone, u.commercial_phone,
+            u.uses_whatsapp, u.identities, u.profile_url,
+            ar.association_id,
+            a.name AS "association_name!",
+            ar.created_at AS "requested_at!"
+            FROM "AssociationRoles" ar
+            JOIN "User" u ON u.id = ar.user_id
+            JOIN "Association" a ON a.id = ar.association_id
+            WHERE COALESCE(u.deleted, FALSE) = FALSE
+            AND COALESCE(a.deleted, FALSE) = FALSE
+            AND ar.role = 'member'
+            AND ar.pending = TRUE
+            AND u.id <> $1
+            AND EXISTS (
+                SELECT 1 FROM "AssociationRoles" adm
+                WHERE adm.association_id = ar.association_id
+                AND adm.user_id = $1
+                AND adm.role = 'admin'
+                AND adm.pending = FALSE
+            )
+            ORDER BY ar.created_at DESC, ar.association_id, u.id
+            LIMIT $2 OFFSET $3
+            "#,
+            admin_user_id, page_size, offset
+        ).fetch_all(db).await?;
+
+        Ok(PendingMembersPage {
+            total_size,
+            page,
+            page_size,
+            total_pages,
+            has_previous_page: page > 1,
+            has_next_page: page < total_pages,
+            items,
+        })
     }
 
     pub async fn toggle_approve(
