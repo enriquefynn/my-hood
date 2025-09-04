@@ -255,7 +255,7 @@ impl Association {
             count_qb
                 .push(r#" JOIN "AssociationRoles" ar ON a.id = ar.association_id AND ar.user_id = "#)
                 .push_bind(uid)
-                .push(" WHERE ar.user_id IS NOT NULL");
+                .push(" WHERE ar.user_id IS NOT NULL and ar.pending = false");
         } else {
             count_qb.push(" WHERE a.public = TRUE");
         }
@@ -283,7 +283,7 @@ impl Association {
             data_qb
                 .push(r#" JOIN "AssociationRoles" ar ON a.id = ar.association_id AND ar.user_id = "#)
                 .push_bind(uid)
-                .push(" WHERE ar.user_id IS NOT NULL");
+                .push(" WHERE ar.user_id IS NOT NULL and ar.pending = false");
         } else {
             data_qb.push(" WHERE a.public = TRUE");
         }
