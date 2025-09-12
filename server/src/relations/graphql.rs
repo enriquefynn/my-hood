@@ -82,7 +82,7 @@ impl RelationsMutation {
         let mut tx = pool.begin().await?;
 
         let user = User::read_one(pool, &user_id).await?;
-        if user.is_admin(ctx, association_id).await? {
+        if !user.is_admin(ctx, association_id).await? {
             Err(anyhow::Error::msg("Only user admin can set other admins"))?
         }
 
