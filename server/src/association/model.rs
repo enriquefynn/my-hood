@@ -1,4 +1,5 @@
 use async_graphql::{Context, InputObject, Object, SimpleObject};
+use bigdecimal::BigDecimal;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, QueryBuilder};
 use uuid::Uuid;
@@ -168,6 +169,21 @@ impl Association {
         .fetch_all(&*pool)
         .await?;
         Ok(fields)
+    }
+
+    pub async fn balance(&self, ctx: &Context<'_>) -> Result<BigDecimal, anyhow::Error> {
+        let pool = ctx.data::<DB>().unwrap();
+
+        let total = sqlx::query_scalar!(r#"
+        SELECT COALESCE(SUM(amount), 0)::numeric 
+            FROM "Transaction"
+                WHERE association_id = $1"#,
+            self.id
+        )
+        .fetch_one(pool)
+        .await?;
+
+        Ok(total.unwrap_or_else(|| BigDecimal::from(0)))
     }
 }
 
