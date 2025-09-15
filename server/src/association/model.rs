@@ -124,7 +124,8 @@ impl Association {
         let users = sqlx::query_as!(
             User,
             r#"SELECT DISTINCT u.* FROM "User" u
-        INNER JOIN "AssociationRoles" ar ON u.id = ar.user_id WHERE ar.association_id = $1 AND ($2::bool IS FALSE OR ar.role = 'admin')"#,
+                INNER JOIN "AssociationRoles" ar ON u.id = ar.user_id WHERE ar.association_id = $1 
+                AND COALESCE(u.deleted, FALSE) = FALSE AND ($2::bool IS FALSE OR ar.role = 'admin')"#,
             self.id,
             only_admin
         )
