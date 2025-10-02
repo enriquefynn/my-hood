@@ -67,7 +67,7 @@ impl ReservationRules {
 
                 let reservations = sqlx::query_as!(
                     FieldReservation,
-                    r#"SELECT * FROM "FieldReservation" WHERE deleted = false AND start_date >= $1 AND end_date <= $2
+                    r#"SELECT * FROM "FieldReservation" WHERE deleted = false AND end_date > $1 AND start_date < $2
                     ORDER BY start_date ASC, end_date ASC;"#,
                     start_date_time,
                     end_date_time,
