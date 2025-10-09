@@ -9,7 +9,7 @@ use crate::{
     Clock, DB,
 };
 
-use super::model::{Field, FieldInput, FieldReservation, FieldReservationInput};
+use super::model::{Field, FieldInput, FieldUpdate, FieldReservation, FieldReservationInput};
 
 #[derive(Default)]
 pub struct FieldQuery;
@@ -42,6 +42,30 @@ impl FieldMutation {
 
         let pool = ctx.data::<DB>().expect("DB pool not found");
         let field = Field::create(pool, field_input).await?;
+        Ok(field)
+    }
+
+    async fn update_field(
+        &self,
+        ctx: &Context<'_>,
+        field_id: Uuid,
+        field: FieldUpdate,
+    ) -> FieldResult<Field> {
+        let claims = ctx.data::<Claims>()?;
+
+        let user_id = claims
+            .sub
+            .ok_or(anyhow::Error::msg("Unauthorized, please log in"))?;
+
+        let pool = ctx.data::<DB>().unwrap();
+        let is_admin = Relations::get_role(ctx, &user_id, field.association_id, Role::Admin).await?;
+        if is_admin.is_none() {
+            Err(anyhow::Error::msg(
+                "User is unauthorized to update field",
+            ))?
+        }
+
+        let field = Field::update(pool, &field_id, field).await?;
         Ok(field)
     }
 

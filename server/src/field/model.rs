@@ -44,8 +44,8 @@ pub struct FieldUpdate {
     pub description: Option<String>,
     pub reservation_rules: Option<String>,
     // Latitude and longitude of the field.
-    pub latitude: Option<f64>,
-    pub longitude: Option<f64>,
+    pub latitude: Option<BigDecimal>,
+    pub longitude: Option<BigDecimal>,
     pub deleted: Option<bool>,
 }
 
@@ -173,6 +173,43 @@ impl Field {
             field.reservation_rules,
             field.latitude,
             field.longitude,
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(field)
+    }
+
+    pub async fn update(
+        db: &DB,
+        id: &Uuid,
+        field: FieldUpdate,
+    ) -> Result<Field, anyhow::Error> {
+        let mut tx = db.begin().await?;
+        let rules_opt = &field.reservation_rules;
+        rules_opt
+            .clone()
+            .map(|json| {
+                ReservationRules::from_json(&json)
+                    .map_err(|e| anyhow::anyhow!("Failed to parse reservation rules: {}", e))
+            })
+            .transpose()?;
+
+        let field = sqlx::query_as!(
+            Field,
+            r#"UPDATE "Field"
+                SET name = COALESCE($1, name),
+                    description = COALESCE($2, description),
+                    reservation_rules = COALESCE($3, reservation_rules),
+                    latitude = COALESCE($4, latitude),
+                    longitude = COALESCE($5, longitude)
+                WHERE id = $6 RETURNING *"#,
+            field.name,
+            field.description,
+            field.reservation_rules,
+            field.latitude,
+            field.longitude,
+            id
         )
         .fetch_one(&mut *tx)
         .await?;
