@@ -1,6 +1,6 @@
-use async_graphql::{Context, InputObject, Object};
+use async_graphql::{Context, InputObject, Object, SimpleObject};
 use serde::{Deserialize, Serialize};
-use sqlx::FromRow;
+use sqlx::{FromRow, QueryBuilder};
 use uuid::Uuid;
 
 use crate::{
@@ -49,6 +49,27 @@ pub struct AssociationInput {
     public: Option<bool>,
     deleted: Option<bool>,
     identity: Option<String>,
+}
+
+#[derive(Debug)]
+pub struct AssocFilter {
+    pub search:      Option<String>,
+    pub member_only: bool,
+    pub pending_only: bool,
+    pub user_id:     Option<Uuid>, // Some(uuid) if member_only = true
+    pub page:        i64,
+    pub page_size:   i64,
+}
+
+#[derive(SimpleObject)]
+pub struct AssociationsPage {
+    pub total_size: i64,
+    pub page:       i64,
+    pub page_size:  i64,
+    pub total_pages: i64,
+    pub has_previous_page: bool,
+    pub has_next_page:     bool,
+    pub items: Vec<Association>,
 }
 
 #[Object]
@@ -210,6 +231,100 @@ impl Association {
             .fetch_all(&mut *tx)
             .await?;
         Ok(associations)
+    }
+
+    pub async fn read_filtered_paginated(
+        db: &DB,
+        filter: AssocFilter,
+    ) -> anyhow::Result<AssociationsPage> {
+        let AssocFilter {
+            search,
+            member_only,
+            pending_only,
+            user_id,
+            mut page,
+            page_size,
+        } = filter;
+
+        let search_pat = search.map(|s| format!("%{}%", s));
+
+        // -------- COUNT ----------
+        let mut count_qb =
+            QueryBuilder::new(r#"SELECT COUNT(DISTINCT a.id) FROM "Association" a"#);
+
+        if pending_only {
+            let uid = user_id.ok_or_else(|| anyhow::Error::msg("user_id required for pending"))?;
+            count_qb
+                .push(r#" JOIN "AssociationRoles" ar ON a.id = ar.association_id AND ar.user_id = "#)
+                .push_bind(uid)
+                .push(" WHERE ar.user_id IS NOT NULL")
+                .push(" AND ar.pending = true");
+        } else if member_only {
+            let uid = user_id.ok_or_else(|| anyhow::Error::msg("user_id required"))?;
+            count_qb
+                .push(r#" JOIN "AssociationRoles" ar ON a.id = ar.association_id AND ar.user_id = "#)
+                .push_bind(uid)
+                .push(" WHERE ar.user_id IS NOT NULL and ar.pending = false");
+        } else {
+            count_qb.push(" WHERE a.public = TRUE");
+        }
+        if let Some(ref pat) = search_pat {
+            count_qb.push(" AND a.name ILIKE ").push_bind(pat);
+        }
+
+        let total_size: i64 = count_qb
+            .build_query_scalar()
+            .fetch_one(db)
+            .await?;
+
+        // pagination
+        let page_size = page_size.max(1);
+        let total_pages = (total_size + page_size - 1) / page_size;
+        page = page.max(1).min(total_pages.max(1));
+        let offset = (page - 1) * page_size;
+
+        // -------- DATA ------------
+        let mut data_qb =
+            QueryBuilder::new(r#"SELECT DISTINCT a.* FROM "Association" a"#);
+
+        if pending_only {
+            let uid = user_id.ok_or_else(|| anyhow::Error::msg("user_id required for pending"))?;
+            data_qb
+                .push(r#" JOIN "AssociationRoles" ar ON a.id = ar.association_id AND ar.user_id = "#)
+                .push_bind(uid)
+                .push(" WHERE ar.user_id IS NOT NULL")
+                .push(" AND ar.pending = true");
+        } else if member_only {
+            let uid = user_id.unwrap();
+            data_qb
+                .push(r#" JOIN "AssociationRoles" ar ON a.id = ar.association_id AND ar.user_id = "#)
+                .push_bind(uid)
+                .push(" WHERE ar.user_id IS NOT NULL and ar.pending = false");
+        } else {
+            data_qb.push(" WHERE a.public = TRUE");
+        }
+        if let Some(ref pat) = search_pat {
+            data_qb.push(" AND a.name ILIKE ").push_bind(pat);
+        }
+        data_qb
+            .push(" ORDER BY a.name")
+            .push(" LIMIT ").push_bind(page_size)
+            .push(" OFFSET ").push_bind(offset);
+
+        let items: Vec<Association> = data_qb
+            .build_query_as()
+            .fetch_all(db)
+            .await?;
+
+        Ok(AssociationsPage {
+            total_size,
+            page,
+            page_size,
+            total_pages,
+            has_previous_page: page > 1,
+            has_next_page: page < total_pages,
+            items,
+        })
     }
 
     pub async fn update(

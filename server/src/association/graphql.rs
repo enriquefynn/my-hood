@@ -2,9 +2,7 @@ use async_graphql::{Context, FieldResult, Object};
 use uuid::Uuid;
 
 use crate::{
-    relations::model::{Relations, Role},
-    token::Claims,
-    DB,
+    association::model::{AssocFilter, AssociationsPage}, relations::model::{Relations, Role}, token::Claims, DB
 };
 
 use super::model::{Association, AssociationInput, AssociationUpdate};
@@ -14,6 +12,44 @@ pub struct AssociationQuery;
 
 #[Object(extends)]
 impl AssociationQuery {
+
+    /// Searches for associations with optional filters for text and member status.
+    ///
+    /// - `search`: if provided, filters `a.name ILIKE %search%`
+    /// - `member`: if `true`, only associations where the user (from JWT) is a member;
+    ///             otherwise (default) only `a.public = true`.
+    /// - `pending`: if `true`, only associations where the user is a pending member;
+    async fn associations(
+        &self,
+        ctx: &Context<'_>,
+        search: Option<String>,
+        member: Option<bool>,
+        pending: Option<bool>,
+        #[graphql(default = 1)] page: i64,
+        #[graphql(name = "pageSize", default = 100)] page_size: i64,
+    ) -> FieldResult<AssociationsPage> {
+        let claims = ctx.data::<Claims>()?;
+        let user_id = claims
+            .sub
+            .ok_or_else(|| anyhow::Error::msg("Unauthorized, please log in"))?;
+        let pool = ctx.data::<DB>()?;
+
+        let member_only = member.unwrap_or(false);
+        let pending_only = pending.unwrap_or(false);
+
+        let filter = AssocFilter {
+            search,
+            member_only: member_only,
+            pending_only: pending_only,
+            user_id: if member_only || pending_only { Some(user_id) } else { None },
+            page,
+            page_size,
+        };
+
+        let page_obj = Association::read_filtered_paginated(pool, filter).await?;
+        Ok(page_obj)
+    }
+    
     // Query association.
     async fn association(&self, ctx: &Context<'_>, id: Uuid) -> FieldResult<Association> {
         let claims = ctx.data::<Claims>()?;
