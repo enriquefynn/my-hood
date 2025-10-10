@@ -187,6 +187,21 @@ impl Association {
 
         Ok(total.unwrap_or_else(|| BigDecimal::from(0)))
     }
+
+    pub async fn member_count(&self, ctx: &Context<'_>) -> Result<i64, anyhow::Error> {
+        let pool = ctx.data::<DB>().unwrap();
+
+        let total = sqlx::query_scalar!(r#"
+            SELECT COUNT(DISTINCT u.id) FROM "User" u
+                INNER JOIN "AssociationRoles" ar ON u.id = ar.user_id WHERE ar.association_id = $1 
+                AND COALESCE(u.deleted, FALSE) = FALSE AND ar.pending = FALSE"#,
+            self.id
+        )
+        .fetch_one(pool)
+        .await?;
+
+        Ok(total.unwrap_or_else(|| 0))
+    }
 }
 
 impl Association {
