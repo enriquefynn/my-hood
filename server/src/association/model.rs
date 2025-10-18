@@ -55,6 +55,7 @@ pub struct AssociationInput {
 pub struct AssocFilter {
     pub search:      Option<String>,
     pub member_only: bool,
+    pub pending_only: bool,
     pub user_id:     Option<Uuid>, // Some(uuid) if member_only = true
     pub page:        i64,
     pub page_size:   i64,
@@ -243,6 +244,7 @@ impl Association {
         let AssocFilter {
             search,
             member_only,
+            pending_only,
             user_id,
             mut page,
             page_size,
@@ -254,12 +256,19 @@ impl Association {
         let mut count_qb =
             QueryBuilder::new(r#"SELECT COUNT(DISTINCT a.id) FROM "Association" a"#);
 
-        if member_only {
+        if pending_only {
+            let uid = user_id.ok_or_else(|| anyhow::Error::msg("user_id required for pending"))?;
+            count_qb
+                .push(r#" JOIN "AssociationRoles" ar ON a.id = ar.association_id AND ar.user_id = "#)
+                .push_bind(uid)
+                .push(" WHERE ar.user_id IS NOT NULL")
+                .push(" AND ar.pending = true");
+        } else if member_only {
             let uid = user_id.ok_or_else(|| anyhow::Error::msg("user_id required"))?;
             count_qb
                 .push(r#" JOIN "AssociationRoles" ar ON a.id = ar.association_id AND ar.user_id = "#)
                 .push_bind(uid)
-                .push(" WHERE ar.user_id IS NOT NULL");
+                .push(" WHERE ar.user_id IS NOT NULL and ar.pending = false");
         } else {
             count_qb.push(" WHERE a.public = TRUE");
         }
@@ -282,12 +291,19 @@ impl Association {
         let mut data_qb =
             QueryBuilder::new(r#"SELECT DISTINCT a.* FROM "Association" a"#);
 
-        if member_only {
+        if pending_only {
+            let uid = user_id.ok_or_else(|| anyhow::Error::msg("user_id required for pending"))?;
+            data_qb
+                .push(r#" JOIN "AssociationRoles" ar ON a.id = ar.association_id AND ar.user_id = "#)
+                .push_bind(uid)
+                .push(" WHERE ar.user_id IS NOT NULL")
+                .push(" AND ar.pending = true");
+        } else if member_only {
             let uid = user_id.unwrap();
             data_qb
                 .push(r#" JOIN "AssociationRoles" ar ON a.id = ar.association_id AND ar.user_id = "#)
                 .push_bind(uid)
-                .push(" WHERE ar.user_id IS NOT NULL");
+                .push(" WHERE ar.user_id IS NOT NULL and ar.pending = false");
         } else {
             data_qb.push(" WHERE a.public = TRUE");
         }
