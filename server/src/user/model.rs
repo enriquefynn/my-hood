@@ -1,7 +1,9 @@
 use async_graphql::{Context, InputObject, Object};
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
+use regex::Regex;
 
 use crate::{
     association::model::Association,
@@ -59,6 +61,10 @@ pub struct UserUpdate {
     pub profile_url: Option<String>,
     pub deleted: Option<bool>,
 }
+
+static BCRYPT_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"^\$2[abyx]\$(\d{2})\$[./A-Za-z0-9]{53}$"#).unwrap()
+});
 
 #[Object]
 impl User {
@@ -157,7 +163,17 @@ impl User {
 }
 
 impl User {
-    pub async fn create(db: &DB, user: UserInput) -> Result<User, anyhow::Error> {
+    pub async fn create(db: &DB, mut user: UserInput) -> Result<User, anyhow::Error> {
+
+        if let Some(plain) = user.password_hash.take() {
+            let s: &str = plain.as_ref();
+
+            if !(s.len() == 60 && BCRYPT_RE.is_match(s)) {
+                let hashed = bcrypt::hash(plain, 12)?;
+                user.password_hash = Some(hashed);
+            }
+        }
+
         let mut tx = db.begin().await?;
 
         let user = sqlx::query_as!(
