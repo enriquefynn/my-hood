@@ -114,14 +114,18 @@ impl Association {
         self.updated_at
     }
 
-    pub async fn members(&self, ctx: &Context<'_>) -> Result<Vec<User>, anyhow::Error> {
+    pub async fn members(&self, ctx: &Context<'_>, only_admin: Option<bool>) -> Result<Vec<User>, anyhow::Error> {
         let pool = ctx.data::<DB>().unwrap();
         let mut tx: sqlx::Transaction<'_, sqlx::Postgres> = pool.begin().await?;
+
+        let only_admin = only_admin.unwrap_or(true);
+
         let users = sqlx::query_as!(
             User,
-            r#"SELECT u.* FROM "User" u
-        INNER JOIN "AssociationRoles" ar ON u.id = ar.user_id WHERE ar.association_id = $1 AND ar.role = 'admin'"#,
-            self.id
+            r#"SELECT DISTINCT u.* FROM "User" u
+        INNER JOIN "AssociationRoles" ar ON u.id = ar.user_id WHERE ar.association_id = $1 AND ($2::bool IS FALSE OR ar.role = 'admin')"#,
+            self.id,
+            only_admin
         )
         .fetch_all(&mut *tx)
         .await?;
