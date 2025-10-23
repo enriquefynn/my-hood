@@ -18,8 +18,29 @@ pub struct FieldMutation;
 
 #[Object(extends)]
 impl FieldQuery {
-    async fn field(&self, _ctx: &Context<'_>, _id: Uuid) -> FieldResult<u32> {
-        todo!()
+    async fn field(&self, ctx: &Context<'_>, id: Uuid) -> FieldResult<Field> {
+        let claims = ctx.data::<Claims>()?;
+
+        let user_id = claims
+            .sub
+            .ok_or(anyhow::Error::msg("Unauthorized, please log in"))?;
+        
+        let pool = ctx.data::<DB>().expect("DB pool not found");
+        let field = Field::get(pool, &id).await?;
+        
+        let is_member = Relations::get_role(
+            ctx,
+            user_id.as_ref(),
+            field.association_id,
+            Role::Member,
+        )
+        .await?;
+
+        if is_member.is_none() {
+            return Err(anyhow::Error::msg("User is not a member of the association").into());
+        }
+
+        Ok(field)
     }
 }
 
