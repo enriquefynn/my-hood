@@ -1,4 +1,4 @@
-use async_graphql::{InputObject, SimpleObject};
+use async_graphql::{InputObject, Object, SimpleObject, Context};
 use bigdecimal::BigDecimal;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::DB;
 
-#[derive(SimpleObject, FromRow, Deserialize, Serialize)]
+#[derive(FromRow, Deserialize, Serialize)]
 pub struct Transaction {
     pub id: Uuid,
     pub association_id: Uuid,
@@ -27,6 +27,65 @@ pub struct TransactionInput {
     details: String,
     amount: sqlx::types::BigDecimal,
     reference_date: chrono::NaiveDate,
+}
+
+#[derive(SimpleObject, sqlx::FromRow)]
+pub struct TransactionCreator {
+    pub id: Uuid,
+    pub name: String,
+}
+
+#[Object]
+impl Transaction{
+    pub async fn id(&self) -> Uuid{
+        self.id
+    }
+    pub async fn association_id(&self) -> Uuid{
+        self.association_id
+    }
+    pub async fn creator_id(&self) -> Uuid{
+        self.creator_id
+    }
+    pub async fn details(&self) -> String{
+        self.details.clone()
+    }
+    pub async fn amount(&self) -> BigDecimal{
+        self.amount.clone()
+    }
+    pub async fn proof_url(&self) -> Option<String>{
+        self.proof_url.clone()
+    }
+    pub async fn reference_date(&self) -> chrono::NaiveDate{
+        self.reference_date
+    }
+    pub async fn deleted(&self) -> bool{
+        self.deleted
+    }
+    pub async fn created_at(&self) -> chrono::NaiveDateTime{
+        self.created_at
+    }
+    pub async fn updated_at(&self) -> chrono::NaiveDateTime{
+        self.updated_at
+    }
+
+    async fn creator<'ctx>(
+        &self,
+        ctx: &Context<'ctx>,
+    ) -> async_graphql::Result<Option<TransactionCreator>> {
+        let pool = ctx.data::<DB>()?;
+
+        let creator = sqlx::query_as!(
+            TransactionCreator,
+            r#"SELECT id, name 
+            FROM "User" WHERE id = $1"#,
+            self.creator_id
+        )
+        .fetch_optional(&*pool)
+        .await
+        .map_err(|e| async_graphql::Error::new(e.to_string()))?;
+
+        Ok(creator)
+    }
 }
 
 impl Transaction {
