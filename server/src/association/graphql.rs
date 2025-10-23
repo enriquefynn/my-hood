@@ -18,11 +18,13 @@ impl AssociationQuery {
     /// - `search`: if provided, filters `a.name ILIKE %search%`
     /// - `member`: if `true`, only associations where the user (from JWT) is a member;
     ///             otherwise (default) only `a.public = true`.
+    /// - `pending`: if `true`, only associations where the user is a pending member;
     async fn associations(
         &self,
         ctx: &Context<'_>,
         search: Option<String>,
         member: Option<bool>,
+        pending: Option<bool>,
         #[graphql(default = 1)] page: i64,
         #[graphql(name = "pageSize", default = 100)] page_size: i64,
     ) -> FieldResult<AssociationsPage> {
@@ -32,10 +34,14 @@ impl AssociationQuery {
             .ok_or_else(|| anyhow::Error::msg("Unauthorized, please log in"))?;
         let pool = ctx.data::<DB>()?;
 
+        let member_only = member.unwrap_or(false);
+        let pending_only = pending.unwrap_or(false);
+
         let filter = AssocFilter {
             search,
-            member_only: member.unwrap_or(false),
-            user_id: if member.unwrap_or(false) { Some(user_id) } else { None },
+            member_only: member_only,
+            pending_only: pending_only,
+            user_id: if member_only || pending_only { Some(user_id) } else { None },
             page,
             page_size,
         };
